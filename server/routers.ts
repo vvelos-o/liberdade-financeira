@@ -1,28 +1,313 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import * as db from "./db";
+import { z } from "zod";
+import { pluggyRouter } from "./routers/pluggy";
+
+// ─── Shared Schemas ───────────────────────────────────────────────────────────
+
+const yearMonthSchema = z.object({ year: z.number().int().min(2020).max(2100), month: z.number().int().min(1).max(12) });
+const categorySchema = z.enum(["lazer", "alimentacao", "transporte", "saude", "outros"]);
+const paymentTypeSchema = z.enum(["credit_card", "cash"]);
+
+// ─── Budget Router ────────────────────────────────────────────────────────────
+
+const budgetRouter = router({
+  get: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getBudgetSettings(ctx.user.id, input.year, input.month)
+  ),
+  upsert: protectedProcedure
+    .input(yearMonthSchema.extend({
+      baseMonthlyBudget: z.string().optional(),
+      investmentRate: z.string().optional(),
+      annualReturnRate: z.string().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { year, month, ...data } = input;
+      return db.upsertBudgetSettings(ctx.user.id, year, month, data);
+    }),
+});
+
+// ─── Income Router ────────────────────────────────────────────────────────────
+
+const incomeRouter = router({
+  getSources: protectedProcedure.query(({ ctx }) => db.getIncomeSources(ctx.user.id)),
+  createSource: protectedProcedure
+    .input(z.object({ name: z.string().min(1), type: z.enum(["fixed", "variable", "extra"]), sortOrder: z.number().optional() }))
+    .mutation(({ ctx, input }) => db.createIncomeSource(ctx.user.id, input)),
+  updateSource: protectedProcedure
+    .input(z.object({ id: z.number(), name: z.string().optional(), type: z.enum(["fixed", "variable", "extra"]).optional(), sortOrder: z.number().optional(), isActive: z.boolean().optional() }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updateIncomeSource(id, ctx.user.id, data);
+    }),
+  deleteSource: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
+    db.deleteIncomeSource(input.id, ctx.user.id)
+  ),
+  getEntries: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getIncomeEntries(ctx.user.id, input.year, input.month)
+  ),
+  getEntriesForYear: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getIncomeEntriesForYear(ctx.user.id, input.year)
+  ),
+  upsertEntry: protectedProcedure
+    .input(yearMonthSchema.extend({ sourceId: z.number(), amount: z.string(), notes: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      db.upsertIncomeEntry(ctx.user.id, input.sourceId, input.year, input.month, input.amount, input.notes)
+    ),
+});
+
+// ─── Fixed Expenses Router ────────────────────────────────────────────────────
+
+const fixedExpensesRouter = router({
+  getCategories: protectedProcedure.query(({ ctx }) => db.getFixedExpenseCategories(ctx.user.id)),
+  createCategory: protectedProcedure
+    .input(z.object({ name: z.string().min(1), sortOrder: z.number().optional() }))
+    .mutation(({ ctx, input }) => db.createFixedExpenseCategory(ctx.user.id, input)),
+  updateCategory: protectedProcedure
+    .input(z.object({ id: z.number(), name: z.string().optional(), sortOrder: z.number().optional(), isActive: z.boolean().optional() }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updateFixedExpenseCategory(id, ctx.user.id, data);
+    }),
+  getEntries: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getFixedExpenseEntries(ctx.user.id, input.year, input.month)
+  ),
+  getEntriesForYear: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getFixedExpenseEntriesForYear(ctx.user.id, input.year)
+  ),
+  upsertEntry: protectedProcedure
+    .input(yearMonthSchema.extend({ categoryId: z.number(), amount: z.string(), notes: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      db.upsertFixedExpenseEntry(ctx.user.id, input.categoryId, input.year, input.month, input.amount, input.notes)
+    ),
+});
+
+// ─── QoL Expenses Router ──────────────────────────────────────────────────────
+
+const qolRouter = router({
+  getExpenses: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getQolExpenses(ctx.user.id, input.year, input.month)
+  ),
+  getExpensesForYear: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getQolExpensesForYear(ctx.user.id, input.year)
+  ),
+  create: protectedProcedure
+    .input(z.object({
+      year: z.number(),
+      month: z.number(),
+      category: categorySchema,
+      paymentType: paymentTypeSchema,
+      description: z.string().min(1),
+      amount: z.string(),
+      creditCardId: z.number().optional(),
+      transactionDate: z.date(),
+      pluggyTransactionId: z.string().optional(),
+    }))
+    .mutation(({ ctx, input }) => db.createQolExpense(ctx.user.id, input)),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      description: z.string().optional(),
+      amount: z.string().optional(),
+      category: categorySchema.optional(),
+      paymentType: paymentTypeSchema.optional(),
+      creditCardId: z.number().optional(),
+      transactionDate: z.date().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updateQolExpense(id, ctx.user.id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
+    db.deleteQolExpense(input.id, ctx.user.id)
+  ),
+});
+
+// ─── Installment Expenses Router ──────────────────────────────────────────────
+
+const installmentRouter = router({
+  getAll: protectedProcedure.query(({ ctx }) => db.getInstallmentExpenses(ctx.user.id)),
+  getMonthsForPeriod: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getInstallmentMonthsForPeriod(ctx.user.id, input.year, input.month)
+  ),
+  getMonthsForYear: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getInstallmentMonthsForYear(ctx.user.id, input.year)
+  ),
+  create: protectedProcedure
+    .input(z.object({
+      description: z.string().min(1),
+      totalAmount: z.string(),
+      installmentAmount: z.string(),
+      totalInstallments: z.number().int().min(1).max(120),
+      startYear: z.number(),
+      startMonth: z.number().min(1).max(12),
+      creditCardId: z.number().optional(),
+      category: categorySchema,
+    }))
+    .mutation(({ ctx, input }) => db.createInstallmentExpense(ctx.user.id, input)),
+  markPaid: protectedProcedure
+    .input(z.object({ id: z.number(), isPaid: z.boolean() }))
+    .mutation(({ ctx, input }) => db.markInstallmentMonthPaid(input.id, ctx.user.id, input.isPaid)),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
+    db.deleteInstallmentExpense(input.id, ctx.user.id)
+  ),
+});
+
+// ─── Planned Expenses Router ──────────────────────────────────────────────────
+
+const plannedRouter = router({
+  getExpenses: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getPlannedExpenses(ctx.user.id, input.year, input.month)
+  ),
+  getExpensesForYear: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getPlannedExpensesForYear(ctx.user.id, input.year)
+  ),
+  create: protectedProcedure
+    .input(z.object({
+      description: z.string().min(1),
+      amount: z.string(),
+      year: z.number(),
+      month: z.number(),
+      paymentType: paymentTypeSchema,
+      category: categorySchema,
+      creditCardId: z.number().optional(),
+      transactionDate: z.date(),
+    }))
+    .mutation(({ ctx, input }) => db.createPlannedExpense(ctx.user.id, input)),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      description: z.string().optional(),
+      amount: z.string().optional(),
+      isPaid: z.boolean().optional(),
+      category: categorySchema.optional(),
+      paymentType: paymentTypeSchema.optional(),
+      creditCardId: z.number().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updatePlannedExpense(id, ctx.user.id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
+    db.deletePlannedExpense(input.id, ctx.user.id)
+  ),
+});
+
+// ─── Credit Cards Router ──────────────────────────────────────────────────────
+
+const creditCardsRouter = router({
+  getCards: protectedProcedure.query(({ ctx }) => db.getCreditCards(ctx.user.id)),
+  create: protectedProcedure
+    .input(z.object({ name: z.string().min(1), lastFourDigits: z.string().length(4).optional(), color: z.string().optional() }))
+    .mutation(({ ctx, input }) => db.createCreditCard(ctx.user.id, input)),
+  update: protectedProcedure
+    .input(z.object({ id: z.number(), name: z.string().optional(), lastFourDigits: z.string().optional(), color: z.string().optional(), isActive: z.boolean().optional() }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updateCreditCard(id, ctx.user.id, data);
+    }),
+  getMonthly: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getCreditCardMonthly(ctx.user.id, input.year, input.month)
+  ),
+  markPaid: protectedProcedure
+    .input(z.object({ creditCardId: z.number(), year: z.number(), month: z.number(), isPaid: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      db.markCreditCardPaid(input.creditCardId, ctx.user.id, input.year, input.month, input.isPaid)
+    ),
+});
+
+// ─── Financial Goals Router ───────────────────────────────────────────────────
+
+const goalsRouter = router({
+  getAll: protectedProcedure.query(({ ctx }) => db.getFinancialGoals(ctx.user.id)),
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1),
+      targetAmount: z.string(),
+      currentAmount: z.string().optional(),
+      targetDate: z.date().optional(),
+      period: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(({ ctx, input }) => db.createFinancialGoal(ctx.user.id, input)),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().optional(),
+      targetAmount: z.string().optional(),
+      currentAmount: z.string().optional(),
+      targetDate: z.date().optional(),
+      achievedDate: z.date().optional(),
+      period: z.string().optional(),
+      isAchieved: z.boolean().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return db.updateFinancialGoal(id, ctx.user.id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
+    db.deleteFinancialGoal(input.id, ctx.user.id)
+  ),
+});
+
+// ─── Dashboard Router ─────────────────────────────────────────────────────────
+
+const dashboardRouter = router({
+  getSummary: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getDashboardSummary(ctx.user.id, input.year, input.month)
+  ),
+  getRecentTransactions: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(({ ctx, input }) => db.getRecentPluggyTransactions(ctx.user.id, input.limit ?? 10)),
+});
+
+// ─── Annual History Router ────────────────────────────────────────────────────
+
+const annualRouter = router({
+  getQolHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getAnnualQolHistory(ctx.user.id, input.year)
+  ),
+  getIncomeHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getIncomeEntriesForYear(ctx.user.id, input.year)
+  ),
+  getFixedHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getFixedExpenseEntriesForYear(ctx.user.id, input.year)
+  ),
+  getInstallmentHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getInstallmentMonthsForYear(ctx.user.id, input.year)
+  ),
+  getPlannedHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getPlannedExpensesForYear(ctx.user.id, input.year)
+  ),
+});
+
+// ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  budget: budgetRouter,
+  income: incomeRouter,
+  fixedExpenses: fixedExpensesRouter,
+  qol: qolRouter,
+  installments: installmentRouter,
+  planned: plannedRouter,
+  creditCards: creditCardsRouter,
+  goals: goalsRouter,
+  dashboard: dashboardRouter,
+  annual: annualRouter,
+  pluggy: pluggyRouter,
 });
 
 export type AppRouter = typeof appRouter;
