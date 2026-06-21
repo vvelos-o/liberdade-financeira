@@ -527,6 +527,34 @@ export async function updatePluggyTransactionCategory(
   await db.update(pluggyTransactions).set({ category, isReviewed: true }).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
 }
 
+export async function getUncategorizedTransactions(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(pluggyTransactions)
+    .where(and(eq(pluggyTransactions.userId, userId), eq(pluggyTransactions.category, "nao_categorizado")))
+    .orderBy(desc(pluggyTransactions.transactionDate))
+    .limit(limit);
+}
+
+export async function bulkUpdatePluggyTransactionCategories(
+  updates: Array<{ id: number; category: string }>,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  for (const { id, category } of updates) {
+    await db
+      .update(pluggyTransactions)
+      .set({
+        category: category as "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado",
+        isReviewed: true,
+      })
+      .where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+  }
+}
+
 // ─── Dashboard Aggregation ────────────────────────────────────────────────────
 
 export async function getDashboardSummary(userId: number, year: number, month: number) {

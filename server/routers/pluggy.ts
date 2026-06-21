@@ -2,6 +2,7 @@ import { z } from "zod";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import axios from "axios";
+import { invokeLLM } from "../_core/llm";
 
 // ─── Pluggy API Helper ────────────────────────────────────────────────────────
 
@@ -209,6 +210,100 @@ export const pluggyRouter = router({
   getStatus: protectedProcedure.query(() => ({
     configured: !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET),
   })),
+
+  // Get uncategorized transactions (for AI review)
+  getUncategorized: protectedProcedure
+    .input(z.object({ limit: z.number().optional() }))
+    .query(({ ctx, input }) => db.getUncategorizedTransactions(ctx.user.id, input.limit ?? 50)),
+
+  // AI-powered bulk categorization suggestion
+  aiSuggestCategories: protectedProcedure
+    .input(z.object({
+      transactionIds: z.array(z.number()).max(50),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const VALID_CATEGORIES = ["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"] as const;
+
+      // Get the transactions to categorize
+      const allUncategorized = await db.getUncategorizedTransactions(ctx.user.id, 200);
+      const toProcess = allUncategorized.filter(t => input.transactionIds.includes(t.id));
+
+      if (toProcess.length === 0) return { suggestions: [] };
+
+      const transactionList = toProcess
+        .map(t => `ID:${t.id} | ${t.description} | R$${t.amount} | ${t.type}`)
+        .join("\n");
+
+      const prompt = `Voce e um assistente especializado em financas pessoais brasileiras. Categorize cada transacao bancaria abaixo em uma das categorias disponiveis.
+
+CATEGORIAS DISPONIVEIS:
+- lazer: restaurantes, bares, streaming (Netflix, Spotify), cinema, jogos, delivery de comida (iFood, Uber Eats, Rappi, Keeta), entretenimento
+- alimentacao: supermercados, mercados, padarias, acougues, hortifruti (Carrefour, Extra, Pao de Acucar, etc)
+- transporte: Uber, 99, taxi, combustivel, posto, estacionamento, metro, onibus, pedagio
+- saude: farmacias, drogarias, medicos, hospitais, clinicas, plano de saude, exames
+- fixo: aluguel, condominio, energia, agua, internet, telefone, seguro
+- investimento: investimentos, tesouro direto, fundos, acoes, CDB, XP, BTG
+- receita: salario, pagamentos recebidos, transferencias recebidas, reembolsos
+- outros: compras gerais, servicos diversos que nao se encaixam nas outras categorias
+- nao_categorizado: apenas se for impossivel determinar a categoria
+
+TRANSACOES (formato: ID | Descricao | Valor | Tipo):
+${transactionList}
+
+Responda APENAS com JSON no formato:
+{"suggestions": [{"id": <numero>, "category": "<categoria>", "confidence": "high|medium|low"}]}`;
+
+      const response = await invokeLLM({
+        messages: [{ role: "user", content: prompt }],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "categorization_result",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                suggestions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "integer" },
+                      category: { type: "string", enum: [...VALID_CATEGORIES] },
+                      confidence: { type: "string", enum: ["high", "medium", "low"] },
+                    },
+                    required: ["id", "category", "confidence"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["suggestions"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) return { suggestions: [] };
+
+      const parsed = JSON.parse(typeof content === "string" ? content : JSON.stringify(content)) as {
+        suggestions: Array<{ id: number; category: string; confidence: string }>;
+      };
+      return parsed;
+    }),
+
+  // Apply AI-suggested or manually chosen categories (bulk)
+  applyCategories: protectedProcedure
+    .input(z.object({
+      updates: z.array(z.object({
+        id: z.number(),
+        category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      })),
+    }))
+    .mutation(({ ctx, input }) =>
+      db.bulkUpdatePluggyTransactionCategories(input.updates, ctx.user.id)
+    ),
 });
 
 // ─── Webhook Handler (Express route, not tRPC) ────────────────────────────────

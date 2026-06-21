@@ -154,3 +154,13 @@
 - [x] Proteger todas as rotas tRPC com o novo sistema de auth
 - [x] Atualizar variáveis de ambiente necessárias (apenas APP_PIN, JWT_SECRET e DATABASE_URL)
 - [x] Push para GitHub e redeploy no Railway
+
+## Categorização com IA (LLM integrado)
+- [ ] Backend: procedure pluggy.suggestCategory (LLM sugere categoria para uma transação)
+- [ ] Backend: procedure pluggy.bulkSuggestCategories (LLM sugere categorias para múltiplas transações)
+- [ ] Backend: procedure pluggy.applyCategory (salva categoria revisada pelo usuário)
+- [ ] Frontend: Botão "Categorizar com IA" na tela Open Finance
+- [ ] Frontend: Modal de revisão de categorias com sugestões da IA
+- [ ] Frontend: Indicador visual de progresso da categorização em lote
+- [ ] Frontend: Filtro por status (nao_categorizado / categorizado)
+- [ ] Frontend: Contador de transações pendentes de categorização
