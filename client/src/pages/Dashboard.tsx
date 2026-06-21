@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import { formatMoney } from "@/components/finance/MoneyDisplay";
 import { useState } from "react";
+import { Link } from "wouter";
 
 const MONTH_NAMES_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -83,11 +84,14 @@ export default function Dashboard() {
     onError: () => setSyncLoading(false),
   });
 
+  const CATEGORY_LABELS: Record<string, string> = {
+    lazer: "Lazer", alimentacao: "Alimentação", transporte: "Transporte",
+    saude: "Saúde", outros: "Outros", fixo: "Gastos Fixos",
+    investimento: "Investimento", receita: "Receita", nao_categorizado: "Não Categorizado",
+  };
+
   const qolData = summary?.qolByCategory?.map((item) => ({
-    name: item.category === "lazer" ? "Lazer" :
-          item.category === "alimentacao" ? "Alimentação" :
-          item.category === "transporte" ? "Transporte" :
-          item.category === "saude" ? "Saúde" : "Outros",
+    name: CATEGORY_LABELS[item.category] ?? item.category,
     value: item.total,
     color: CATEGORY_COLORS[item.category as keyof typeof CATEGORY_COLORS] ?? "#9ca3af",
   })).filter((d) => d.value > 0) ?? [];
@@ -97,6 +101,7 @@ export default function Dashboard() {
   const balance = summary?.balance ?? 0;
   const fcp = summary?.fcp ?? 0;
   const budgetUsedPct = summary?.baseMonthlyBudget ? (totalExpenses / summary.baseMonthlyBudget) * 100 : 0;
+  const hasPluggyData = (summary as any)?.hasPluggyData ?? false;
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload?.length) {
@@ -116,7 +121,15 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">{monthLabel}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">{monthLabel}</p>
+            {hasPluggyData && (
+              <Badge variant="secondary" className="text-xs gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                Open Finance
+              </Badge>
+            )}
+          </div>
         </div>
         {pluggyStatus?.configured && (
           <Button
@@ -257,7 +270,46 @@ export default function Dashboard() {
                 <div className="space-y-3 pt-2">
                   {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
                 </div>
+              ) : hasPluggyData ? (
+                // Pluggy-based breakdown by category
+                <div className="space-y-2 pt-2">
+                  {(summary?.qolByCategory ?? []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Nenhum gasto neste mês</p>
+                  ) : (
+                    (summary?.qolByCategory ?? []).sort((a, b) => b.total - a.total).map((item) => {
+                      const pct = totalExpenses > 0 ? (item.total / totalExpenses) * 100 : 0;
+                      const color = CATEGORY_COLORS[item.category as keyof typeof CATEGORY_COLORS] ?? "#9ca3af";
+                      const label = { lazer: "Lazer", alimentacao: "Alimentação", transporte: "Transporte",
+                        saude: "Saúde", outros: "Outros", fixo: "Gastos Fixos",
+                        investimento: "Investimento", nao_categorizado: "Não Categorizado" }[item.category] ?? item.category;
+                      return (
+                        <div key={item.category}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                              <span className="text-xs text-muted-foreground">{label}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium font-money text-foreground">{formatMoneyCompact(item.total)}</span>
+                              <span className="text-xs text-muted-foreground w-10 text-right">{pct.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.6, delay: 0.1 }}
+                              className="h-full rounded-full"
+                              style={{ backgroundColor: color }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               ) : (
+                // Manual entries breakdown
                 <div className="space-y-2 pt-2">
                   {[
                     { label: "Gastos Fixos", value: summary?.totalFixed ?? 0, color: "bg-yellow-400" },
@@ -289,6 +341,12 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                  {!hasPluggyData && totalExpenses === 0 && (
+                    <div className="text-center py-4">
+                      <p className="text-xs text-muted-foreground mb-2">Nenhum dado manual registrado.</p>
+                      <Link href="/pluggy" className="text-xs text-primary hover:underline">Conectar Open Finance →</Link>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

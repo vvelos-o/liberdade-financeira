@@ -561,25 +561,71 @@ export async function getDashboardSummary(userId: number, year: number, month: n
   const db = await getDb();
   if (!db) return null;
 
-  // Total income
+  // Date range for the month
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+
+  // ── Pluggy transactions for this month ──────────────────────────────────────
+  // Income from Pluggy: credit transactions categorized as 'receita'
+  const pluggyIncomeResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "credit"),
+        eq(pluggyTransactions.category, "receita"),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    );
+
+  // Expenses from Pluggy: debit transactions (excluding investimento)
+  const pluggyExpenseResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    );
+
+  // Pluggy expenses by category
+  const pluggyByCategory = await db
+    .select({
+      category: pluggyTransactions.category,
+      total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
+    })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    )
+    .groupBy(pluggyTransactions.category);
+
+  // ── Manual entries (kept for backwards compatibility) ────────────────────────
   const incomeResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
     .from(incomeEntries)
     .where(and(eq(incomeEntries.userId, userId), eq(incomeEntries.year, year), eq(incomeEntries.month, month)));
 
-  // Total fixed expenses
   const fixedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
     .from(fixedExpenseEntries)
     .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
 
-  // Total QoL expenses
   const qolResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${qolExpenses.amount}), 0)` })
     .from(qolExpenses)
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year), eq(qolExpenses.month, month)));
 
-  // QoL by category
   const qolByCategory = await db
     .select({
       category: qolExpenses.category,
@@ -589,13 +635,11 @@ export async function getDashboardSummary(userId: number, year: number, month: n
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year), eq(qolExpenses.month, month)))
     .groupBy(qolExpenses.category);
 
-  // Total installments this month
   const installmentResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${installmentExpenseMonths.amount}), 0)` })
     .from(installmentExpenseMonths)
     .where(and(eq(installmentExpenseMonths.userId, userId), eq(installmentExpenseMonths.year, year), eq(installmentExpenseMonths.month, month)));
 
-  // Total planned expenses
   const plannedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${plannedExpenses.amount}), 0)` })
     .from(plannedExpenses)
@@ -604,31 +648,60 @@ export async function getDashboardSummary(userId: number, year: number, month: n
   // Budget settings
   const budget = await getBudgetSettings(userId, year, month);
 
-  const totalIncome = parseFloat(incomeResult[0]?.total ?? "0");
+  // ── Aggregate ────────────────────────────────────────────────────────────────
+  const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
+  const pluggyExpenses = parseFloat(pluggyExpenseResult[0]?.total ?? "0");
+
+  const manualIncome = parseFloat(incomeResult[0]?.total ?? "0");
   const totalFixed = parseFloat(fixedResult[0]?.total ?? "0");
   const totalQol = parseFloat(qolResult[0]?.total ?? "0");
   const totalInstallments = parseFloat(installmentResult[0]?.total ?? "0");
   const totalPlanned = parseFloat(plannedResult[0]?.total ?? "0");
-  const totalExpenses = totalFixed + totalQol + totalInstallments + totalPlanned;
+
+  // Use Pluggy data when available, fall back to manual entries
+  const hasPluggyData = pluggyIncome > 0 || pluggyExpenses > 0;
+  const totalIncome = hasPluggyData ? pluggyIncome : manualIncome;
+  const totalExpenses = hasPluggyData
+    ? pluggyExpenses
+    : totalFixed + totalQol + totalInstallments + totalPlanned;
   const balance = totalIncome - totalExpenses;
 
   const investmentRate = parseFloat(budget?.investmentRate ?? "0.15");
   const annualReturnRate = parseFloat(budget?.annualReturnRate ?? "0.15");
   const fcp = totalIncome * investmentRate * annualReturnRate;
 
+  // Build category breakdown — prefer Pluggy, fall back to manual QoL
+  const categoryMap = new Map<string, number>();
+  if (hasPluggyData) {
+    for (const row of pluggyByCategory) {
+      const cat = row.category as string;
+      categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + parseFloat(row.total));
+    }
+  } else {
+    for (const row of qolByCategory) {
+      categoryMap.set(row.category, parseFloat(row.total));
+    }
+  }
+  const qolByCategoryResult = Array.from(categoryMap.entries())
+    .map(([category, total]) => ({ category, total }))
+    .filter((r) => r.total > 0);
+
   return {
     totalIncome,
-    totalFixed,
-    totalQol,
-    totalInstallments,
-    totalPlanned,
+    totalFixed: hasPluggyData ? (categoryMap.get("fixo") ?? 0) : totalFixed,
+    totalQol: hasPluggyData
+      ? ["lazer", "alimentacao", "transporte", "saude", "outros"].reduce((s, c) => s + (categoryMap.get(c) ?? 0), 0)
+      : totalQol,
+    totalInstallments: hasPluggyData ? 0 : totalInstallments,
+    totalPlanned: hasPluggyData ? 0 : totalPlanned,
     totalExpenses,
     balance,
     fcp,
     baseMonthlyBudget: parseFloat(budget?.baseMonthlyBudget ?? "0"),
     investmentRate,
     annualReturnRate,
-    qolByCategory: qolByCategory.map((r) => ({ category: r.category, total: parseFloat(r.total) })),
+    hasPluggyData,
+    qolByCategory: qolByCategoryResult,
   };
 }
 
