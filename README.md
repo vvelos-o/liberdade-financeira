@@ -24,7 +24,7 @@ Um webapp completo de gestão financeira pessoal inspirado na metodologia "Inves
 - **Backend:** Node.js + Express + tRPC 11
 - **Banco de dados:** MySQL (TiDB compatível)
 - **ORM:** Drizzle ORM
-- **Auth:** Manus OAuth
+- **Auth:** PIN via JWT (independente, sem OAuth externo)
 - **Open Finance:** Pluggy API (meu.pluggy.ai)
 
 ## Deploy no Railway
@@ -32,7 +32,6 @@ Um webapp completo de gestão financeira pessoal inspirado na metodologia "Inves
 ### 1. Pré-requisitos
 
 - Conta no [Railway](https://railway.app)
-- Conta no [Manus](https://manus.im) para OAuth
 - Conta no [meu.pluggy.ai](https://meu.pluggy.ai) para Open Finance (opcional)
 
 ### 2. Criar projeto no Railway
@@ -60,18 +59,16 @@ Configure as seguintes variáveis no painel do Railway (Settings → Variables):
 # Banco de dados (gerado pelo Railway MySQL plugin)
 DATABASE_URL=mysql://user:password@host:port/database
 
-# Autenticação (gerado pelo Manus)
-JWT_SECRET=seu_jwt_secret_aqui
-VITE_APP_ID=seu_app_id_manus
-OAUTH_SERVER_URL=https://api.manus.im
-VITE_OAUTH_PORTAL_URL=https://auth.manus.im
-OWNER_OPEN_ID=seu_open_id_manus
-OWNER_NAME=Seu Nome
+# Autenticação por PIN (você define o PIN que quiser)
+JWT_SECRET=uma-chave-longa-e-aleatoria-aqui
+APP_PIN=seu-pin-secreto
 
 # Open Finance — Pluggy (opcional, para sync automático)
 PLUGGY_CLIENT_ID=seu_client_id_pluggy
 PLUGGY_CLIENT_SECRET=seu_client_secret_pluggy
 ```
+
+> **Importante:** `APP_PIN` é a senha de acesso ao app. Pode ser qualquer texto — números, letras ou uma frase. Guarde em local seguro.
 
 ### 5. Deploy
 
