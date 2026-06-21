@@ -142,6 +142,15 @@
 - [x] Total: 36 testes passando
 
 ## GitHub & Deploy
-- [ ] Criar repositório privado no GitHub
-- [ ] Configurar README com instruções de deploy no Railway
-- [ ] Adicionar variáveis de ambiente necessárias ao README
+- [x] Criar repositório privado no GitHub (bundle gerado para push manual)
+- [x] Configurar README com instruções de deploy no Railway
+- [x] Adicionar variáveis de ambiente necessárias ao README
+
+## Autenticação Independente (sem Manus OAuth)
+- [ ] Remover dependência do Manus OAuth do servidor
+- [ ] Criar autenticação por PIN via JWT simples (variável APP_PIN no Railway)
+- [ ] Criar tela de login com PIN no frontend
+- [ ] Remover useAuth/getLoginUrl do Manus do frontend
+- [ ] Proteger todas as rotas tRPC com o novo sistema de auth
+- [ ] Atualizar variáveis de ambiente necessárias (remover VITE_APP_ID, OAUTH_SERVER_URL, etc.)
+- [ ] Push para GitHub e redeploy no Railway

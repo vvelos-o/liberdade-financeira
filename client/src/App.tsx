@@ -7,8 +7,9 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { MonthProvider } from "./contexts/MonthContext";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
-import { getLoginUrl } from "./const";
 import { Loader2 } from "lucide-react";
+import Login from "./pages/Login";
+import { useState } from "react";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -24,7 +25,8 @@ import OpenFinance from "./pages/OpenFinance";
 import FCP from "./pages/FCP";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, refresh } = useAuth();
+  const [loginKey, setLoginKey] = useState(0);
 
   if (loading) {
     return (
@@ -39,27 +41,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-6 text-center max-w-sm px-4">
-          <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Finance Master</h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              Sua gestão financeira pessoal inteligente. Conecte-se para continuar.
-            </p>
-          </div>
-          <a
-            href={getLoginUrl()}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold py-2.5 px-6 rounded-lg transition-colors text-sm"
-          >
-            Entrar com Manus
-          </a>
-        </div>
-      </div>
+      <Login
+        key={loginKey}
+        onSuccess={() => {
+          setLoginKey(k => k + 1);
+          refresh();
+        }}
+      />
     );
   }
 

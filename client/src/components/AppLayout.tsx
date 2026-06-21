@@ -26,9 +26,7 @@ import { Link, useLocation } from "wouter";
 import { useMonth } from "@/contexts/MonthContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 
 const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTH_NAMES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -78,9 +76,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { year, month, setYearMonth } = useMonth();
   const { user, logout } = useAuth();
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => { logout(); toast.success("Até logo!"); },
-  });
+  const handleLogout = async () => {
+    await logout();
+    toast.success("Até logo!");
+  };
 
   const prevMonth = () => {
     if (month === 1) setYearMonth(year - 1, 12);
@@ -167,7 +166,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-                  onClick={() => logoutMutation.mutate()}
+                  onClick={handleLogout}
                 >
                   <LogOut className="h-3.5 w-3.5" />
                 </Button>
@@ -175,11 +174,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             )}
           </div>
         ) : (
-          <Button variant="ghost" size="sm" className="w-full" asChild>
-            <a href={getLoginUrl()}>
-              <User className="h-4 w-4 mr-2" />
-              {!sidebarCollapsed && "Entrar"}
-            </a>
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => window.location.reload()}>
+            <User className="h-4 w-4 mr-2" />
+            {!sidebarCollapsed && "Entrar"}
           </Button>
         )}
       </div>
