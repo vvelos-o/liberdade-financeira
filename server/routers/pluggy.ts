@@ -38,14 +38,38 @@ async function getPluggyAccounts(apiKey: string, itemId: string) {
   return response.data.results ?? [];
 }
 
+interface PluggyTransaction {
+  id: string;
+  description?: string;
+  amount?: number;
+  date?: string;
+  type?: string;
+}
+
 async function getPluggyTransactions(apiKey: string, accountId: string, from?: string, to?: string) {
-  let url = `${PLUGGY_API_URL}/transactions?accountId=${accountId}&pageSize=500`;
-  if (from) url += `&from=${from}`;
-  if (to) url += `&to=${to}`;
-  const response = await axios.get(url, {
-    headers: { "X-API-KEY": apiKey },
-  });
-  return response.data.results ?? [];
+  // v2 uses cursor-based pagination (pageSize param is not supported)
+  const allResults: PluggyTransaction[] = [];
+  let cursor: string | undefined = undefined;
+  let page = 0;
+  const MAX_PAGES = 20; // safety limit
+
+  do {
+    let url = `${PLUGGY_API_URL}/v2/transactions?accountId=${accountId}`;
+    if (from) url += `&from=${from}`;
+    if (to) url += `&to=${to}`;
+    if (cursor) url += `&cursor=${cursor}`;
+
+    const response = await axios.get(url, {
+      headers: { "X-API-KEY": apiKey },
+    });
+
+    const results = response.data.results ?? [];
+    allResults.push(...results);
+    cursor = response.data.nextCursor ?? undefined;
+    page++;
+  } while (cursor && page < MAX_PAGES);
+
+  return allResults;
 }
 
 // ─── Auto-categorization ──────────────────────────────────────────────────────
@@ -141,7 +165,7 @@ export const pluggyRouter = router({
                 description: tx.description ?? "",
                 amount: String(Math.abs(tx.amount ?? 0)),
                 type: (tx.amount ?? 0) < 0 ? "debit" : "credit",
-                transactionDate: new Date(tx.date),
+                transactionDate: new Date(tx.date ?? Date.now()),
                 category,
               });
               totalImported++;
