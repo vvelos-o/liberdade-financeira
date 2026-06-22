@@ -17,6 +17,7 @@ import {
   pluggyTransactions,
   qolExpenses,
   users,
+  categoryRules,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -719,4 +720,38 @@ export async function getAnnualQolHistory(userId: number, year: number) {
     .from(qolExpenses)
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year)))
     .groupBy(qolExpenses.month, qolExpenses.category);
+}
+
+// ─── Category Rules (Learned AI) ──────────────────────────────────────────
+
+export async function getCategoryRules(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(categoryRules).where(eq(categoryRules.userId, userId)).orderBy(desc(categoryRules.confidence));
+}
+
+export async function upsertCategoryRule(userId: number, pattern: string, category: string, source: "user_correction" | "manual" = "user_correction") {
+  const db = await getDb();
+  if (!db) return null;
+  // Check if a rule with this pattern already exists for this user
+  const existing = await db.select().from(categoryRules)
+    .where(and(eq(categoryRules.userId, userId), eq(categoryRules.pattern, pattern)))
+    .limit(1);
+  if (existing.length > 0) {
+    // Update the category and increment confidence
+    await db.update(categoryRules)
+      .set({ category: category as any, confidence: sql`${categoryRules.confidence} + 1` })
+      .where(eq(categoryRules.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    // Insert new rule
+    const result = await db.insert(categoryRules).values({ userId, pattern, category: category as any, source });
+    return result[0].insertId;
+  }
+}
+
+export async function deleteCategoryRule(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(categoryRules).where(and(eq(categoryRules.id, id), eq(categoryRules.userId, userId)));
 }

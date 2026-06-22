@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   Wifi, WifiOff, RefreshCw, CheckCircle2, Zap, Link2,
-  Sparkles, ChevronDown, ChevronUp, Check, X, Filter
+  Sparkles, ChevronDown, ChevronUp, Check, X, Filter, BookOpen, Trash2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,7 +111,29 @@ export default function OpenFinance() {
     onSuccess: () => {
       utils.pluggy.getTransactions.invalidate();
       utils.pluggy.getUncategorized.invalidate();
+      utils.dashboard.getSummary.invalidate();
     },
+  });
+
+  const correctCategoryMutation = trpc.pluggy.correctCategory.useMutation({
+    onSuccess: () => {
+      utils.pluggy.getTransactions.invalidate();
+      utils.pluggy.getUncategorized.invalidate();
+      utils.pluggy.getRules.invalidate();
+      utils.dashboard.getSummary.invalidate();
+      toast.success("Categoria atualizada e regra salva!");
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
+  });
+
+  const { data: learnedRules } = trpc.pluggy.getRules.useQuery();
+
+  const deleteRuleMutation = trpc.pluggy.deleteRule.useMutation({
+    onSuccess: () => {
+      utils.pluggy.getRules.invalidate();
+      toast.success("Regra removida!");
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
   });
 
   const isConfigured = status?.configured ?? false;
@@ -503,9 +525,10 @@ export default function OpenFinance() {
                         <Select
                           value={tx.category ?? "nao_categorizado"}
                           onValueChange={(val) => {
-                            updateCategoryMutation.mutate({
-                              id: tx.id,
+                            correctCategoryMutation.mutate({
+                              transactionId: tx.id,
                               category: val as CategoryValue,
+                              description: tx.description ?? "",
                             });
                           }}
                         >
@@ -526,6 +549,53 @@ export default function OpenFinance() {
                       />
                     </div>
                   </motion.div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Learned Rules Section */}
+      {isConfigured && learnedRules && learnedRules.length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm font-semibold">Regras Aprendidas</CardTitle>
+                <Badge variant="secondary" className="text-xs">{learnedRules.length}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">A IA usa estas regras para categorizar automaticamente</p>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {learnedRules.map((rule) => {
+                const catStyle = getCategoryStyle(rule.category);
+                return (
+                  <div key={rule.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-secondary/30 group">
+                    <div className="flex items-center gap-3">
+                      <code className="text-xs bg-secondary/50 px-2 py-0.5 rounded font-mono text-foreground">
+                        {rule.pattern}
+                      </code>
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium", catStyle.color)}>
+                        {catStyle.label}
+                      </span>
+                      {rule.confidence > 1 && (
+                        <span className="text-xs text-muted-foreground">({rule.confidence}x)</span>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                      onClick={() => deleteRuleMutation.mutate({ id: rule.id })}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 );
               })}
             </div>

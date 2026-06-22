@@ -15,6 +15,13 @@
       "when": 1782009299870,
       "tag": "0001_ambitious_lockheed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1782137900457,
+      "tag": "0002_naive_apocalypse",
+      "breakpoints": true
     }
   ]
 }

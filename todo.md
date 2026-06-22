@@ -164,3 +164,10 @@
 - [ ] Frontend: Indicador visual de progresso da categorização em lote
 - [ ] Frontend: Filtro por status (nao_categorizado / categorizado)
 - [ ] Frontend: Contador de transações pendentes de categorização
+
+## Sistema de Regras Aprendidas para Categorização com IA
+- [ ] Criar tabela category_rules no schema e aplicar migration no Railway
+- [ ] Criar helpers no db.ts para salvar/buscar regras
+- [ ] Criar procedures tRPC para gerenciar regras
+- [ ] Atualizar prompt do autoCategorize para incluir regras aprendidas como contexto
+- [ ] Atualizar frontend para salvar correções como regras automaticamente

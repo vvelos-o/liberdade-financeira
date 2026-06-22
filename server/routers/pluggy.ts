@@ -234,8 +234,14 @@ export const pluggyRouter = router({
         .map(t => `ID:${t.id} | ${t.description} | R$${t.amount} | ${t.type}`)
         .join("\n");
 
-      const prompt = `Voce e um assistente especializado em financas pessoais brasileiras. Categorize cada transacao bancaria abaixo em uma das categorias disponiveis.
+      // Fetch learned rules to include in prompt
+      const rules = await db.getCategoryRules(ctx.user.id);
+      const rulesSection = rules.length > 0
+        ? `\nREGRAS APRENDIDAS (use estas como prioridade, sao correcoes feitas pelo usuario):\n${rules.map(r => `- "${r.pattern}" → ${r.category} (confianca: ${r.confidence}x)`).join("\n")}\n`
+        : "";
 
+      const prompt = `Voce e um assistente especializado em financas pessoais brasileiras. Categorize cada transacao bancaria abaixo em uma das categorias disponiveis.
+${rulesSection}
 CATEGORIAS DISPONIVEIS:
 - lazer: restaurantes, bares, streaming (Netflix, Spotify), cinema, jogos, delivery de comida (iFood, Uber Eats, Rappi, Keeta), entretenimento
 - alimentacao: supermercados, mercados, padarias, acougues, hortifruti (Carrefour, Extra, Pao de Acucar, etc)
@@ -246,6 +252,8 @@ CATEGORIAS DISPONIVEIS:
 - receita: salario, pagamentos recebidos, transferencias recebidas, reembolsos
 - outros: compras gerais, servicos diversos que nao se encaixam nas outras categorias
 - nao_categorizado: apenas se for impossivel determinar a categoria
+
+IMPORTANTE: Se a descricao da transacao corresponder a uma das REGRAS APRENDIDAS acima, USE a categoria indicada na regra com confianca "high".
 
 TRANSACOES (formato: ID | Descricao | Valor | Tipo):
 ${transactionList}
@@ -304,6 +312,47 @@ Responda APENAS com JSON no formato:
     .mutation(({ ctx, input }) =>
       db.bulkUpdatePluggyTransactionCategories(input.updates, ctx.user.id)
     ),
+
+  // ─── Category Rules (Learned AI) ────────────────────────────────────────────
+
+  getRules: protectedProcedure.query(({ ctx }) => db.getCategoryRules(ctx.user.id)),
+
+  saveRule: protectedProcedure
+    .input(z.object({
+      pattern: z.string().min(1),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      source: z.enum(["user_correction", "manual"]).default("user_correction"),
+    }))
+    .mutation(({ ctx, input }) =>
+      db.upsertCategoryRule(ctx.user.id, input.pattern, input.category, input.source)
+    ),
+
+  deleteRule: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) => db.deleteCategoryRule(input.id, ctx.user.id)),
+
+  // Save correction: updates the transaction category AND saves a rule for future use
+  correctCategory: protectedProcedure
+    .input(z.object({
+      transactionId: z.number(),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      description: z.string(), // the transaction description to use as pattern
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Update the transaction category
+      await db.updatePluggyTransactionCategory(input.transactionId, ctx.user.id, input.category);
+      // Extract a clean pattern from the description (remove numbers, dates, etc.)
+      const pattern = input.description
+        .replace(/\d{2}\/\d{2}/g, "") // remove dates
+        .replace(/\d+/g, "") // remove numbers
+        .replace(/\s+/g, " ") // normalize spaces
+        .trim()
+        .toUpperCase();
+      if (pattern.length >= 3) {
+        await db.upsertCategoryRule(ctx.user.id, pattern, input.category, "user_correction");
+      }
+      return { success: true };
+    }),
 });
 
 // ─── Webhook Handler (Express route, not tRPC) ────────────────────────────────
