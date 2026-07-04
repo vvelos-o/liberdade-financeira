@@ -302,6 +302,7 @@ Responda APENAS com JSON no formato:
 {"suggestions": [{"id": <numero>, "category": "<categoria>", "confidence": "high|medium|low"}]}`;
 
       const response = await invokeLLM({
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         response_format: {
           type: "json_schema",
