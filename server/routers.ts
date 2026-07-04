@@ -9,7 +9,7 @@ import { pluggyRouter } from "./routers/pluggy";
 // ─── Shared Schemas ───────────────────────────────────────────────────────────
 
 const yearMonthSchema = z.object({ year: z.number().int().min(2020).max(2100), month: z.number().int().min(1).max(12) });
-const categorySchema = z.enum(["lazer", "alimentacao", "transporte", "saude", "outros"]);
+const categorySchema = z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos"]);
 const paymentTypeSchema = z.enum(["credit_card", "cash"]);
 
 // ─── Budget Router ────────────────────────────────────────────────────────────
@@ -23,6 +23,8 @@ const budgetRouter = router({
       baseMonthlyBudget: z.string().optional(),
       investmentRate: z.string().optional(),
       annualReturnRate: z.string().optional(),
+      investmentTarget: z.string().optional(),
+      categoryPercentages: z.record(z.string(), z.number()).optional(),
     }))
     .mutation(({ ctx, input }) => {
       const { year, month, ...data } = input;
@@ -57,6 +59,34 @@ const incomeRouter = router({
     .mutation(({ ctx, input }) =>
       db.upsertIncomeEntry(ctx.user.id, input.sourceId, input.year, input.month, input.amount, input.notes)
     ),
+  handleExtra: protectedProcedure
+    .input(z.object({
+      amount: z.string(),
+      action: z.enum(["invest", "budget"]),
+      year: z.number(),
+      month: z.number(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // If user chooses to invest, we just log it (investment tracking is informational)
+      // If user chooses to add to budget, we create an extra income entry for next month
+      if (input.action === "budget") {
+        // Find or create an "Extra" income source
+        const sources = await db.getIncomeSources(ctx.user.id);
+        let extraSource = sources?.find((s: any) => s.type === "extra" && s.name === "Sobra do mês");
+        if (!extraSource) {
+          await db.createIncomeSource(ctx.user.id, { name: "Sobra do mês", type: "extra" });
+          const updatedSources = await db.getIncomeSources(ctx.user.id);
+          extraSource = updatedSources?.find((s: any) => s.type === "extra" && s.name === "Sobra do mês");
+        }
+        if (extraSource) {
+          const nextMonth = input.month === 12 ? 1 : input.month + 1;
+          const nextYear = input.month === 12 ? input.year + 1 : input.year;
+          await db.upsertIncomeEntry(ctx.user.id, extraSource.id, nextYear, nextMonth, input.amount, input.description || "Sobra do mês anterior");
+        }
+      }
+      return { success: true, action: input.action };
+    }),
 });
 
 // ─── Fixed Expenses Router ────────────────────────────────────────────────────
@@ -231,8 +261,18 @@ const goalsRouter = router({
       targetDate: z.date().optional(),
       period: z.string().optional(),
       notes: z.string().optional(),
+      goalType: z.enum(["commitment", "optional"]).optional(),
     }))
-    .mutation(({ ctx, input }) => db.createFinancialGoal(ctx.user.id, input)),
+    .mutation(({ ctx, input }) => {
+      let suggestedMonthlyAmount: string | undefined;
+      if (input.goalType === "optional" && input.targetDate) {
+        const now = new Date();
+        const monthsLeft = Math.max(1, (input.targetDate.getFullYear() - now.getFullYear()) * 12 + (input.targetDate.getMonth() - now.getMonth()));
+        const remaining = parseFloat(input.targetAmount) - parseFloat(input.currentAmount ?? "0");
+        suggestedMonthlyAmount = (remaining / monthsLeft).toFixed(2);
+      }
+      return db.createFinancialGoal(ctx.user.id, { ...input, suggestedMonthlyAmount });
+    }),
   update: protectedProcedure
     .input(z.object({
       id: z.number(),
@@ -244,6 +284,7 @@ const goalsRouter = router({
       period: z.string().optional(),
       isAchieved: z.boolean().optional(),
       notes: z.string().optional(),
+      goalType: z.enum(["commitment", "optional"]).optional(),
     }))
     .mutation(({ ctx, input }) => {
       const { id, ...data } = input;
@@ -263,6 +304,23 @@ const dashboardRouter = router({
   getRecentTransactions: protectedProcedure
     .input(z.object({ limit: z.number().optional() }))
     .query(({ ctx, input }) => db.getRecentPluggyTransactions(ctx.user.id, input.limit ?? 10)),
+  getFunnel: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getDashboardFunnel(ctx.user.id, input.year, input.month)
+  ),
+});
+
+// ─── Insights Router ─────────────────────────────────────────────────────────
+
+const insightsRouter = router({
+  get: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
+    db.getMonthlyInsight(ctx.user.id, input.year, input.month)
+  ),
+  generate: protectedProcedure.input(yearMonthSchema).mutation(({ ctx, input }) =>
+    db.generateMonthlyInsight(ctx.user.id, input.year, input.month)
+  ),
+  dismiss: protectedProcedure.input(yearMonthSchema).mutation(({ ctx, input }) =>
+    db.dismissMonthlyInsight(ctx.user.id, input.year, input.month)
+  ),
 });
 
 // ─── Annual History Router ────────────────────────────────────────────────────
@@ -308,6 +366,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   annual: annualRouter,
   pluggy: pluggyRouter,
+  insights: insightsRouter,
 });
 
 export type AppRouter = typeof appRouter;

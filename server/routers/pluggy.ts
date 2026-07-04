@@ -159,16 +159,45 @@ export const pluggyRouter = router({
             const transactions = await getPluggyTransactions(apiKey, account.id, input.fromDate, input.toDate);
             for (const tx of transactions) {
               const category = autoCategorize(tx.description ?? "");
+              const desc = tx.description ?? "";
+              const amount = Math.abs(tx.amount ?? 0);
+
               await db.upsertPluggyTransaction(ctx.user.id, {
                 pluggyTransactionId: tx.id,
                 pluggyItemId: conn.pluggyItemId,
                 accountId: account.id,
-                description: tx.description ?? "",
-                amount: String(Math.abs(tx.amount ?? 0)),
+                description: desc,
+                amount: String(amount),
                 type: (tx.amount ?? 0) < 0 ? "debit" : "credit",
                 transactionDate: new Date(tx.date ?? Date.now()),
                 category,
               });
+
+              // Auto-detect installments (X/Y pattern like "KABUM 3/8" or "PARCELA 2 DE 6")
+              const installmentMatch = desc.match(/(\d{1,2})\s*[\/]\s*(\d{1,3})/) || desc.match(/(\d{1,2})\s+DE\s+(\d{1,3})/i);
+              if (installmentMatch && (tx.amount ?? 0) < 0) {
+                const currentInstallment = parseInt(installmentMatch[1]);
+                const totalInstallments = parseInt(installmentMatch[2]);
+                if (totalInstallments >= 2 && totalInstallments <= 120 && currentInstallment <= totalInstallments) {
+                  // Extract clean name (remove installment pattern)
+                  const cleanDesc = desc.replace(installmentMatch[0], "").trim().replace(/\s+/g, " ");
+                  const txDate = new Date(tx.date ?? Date.now());
+                  const startMonth = txDate.getMonth() + 1 - (currentInstallment - 1);
+                  const startYear = txDate.getFullYear() + Math.floor((startMonth - 1) / 12);
+                  const normalizedStartMonth = ((startMonth - 1) % 12 + 12) % 12 + 1;
+                  try {
+                    await db.createInstallmentExpense(ctx.user.id, {
+                      description: cleanDesc || desc,
+                      totalAmount: String(amount * totalInstallments),
+                      installmentAmount: String(amount),
+                      totalInstallments,
+                      startYear: normalizedStartMonth > txDate.getMonth() + 1 ? startYear - 1 : startYear,
+                      startMonth: normalizedStartMonth,
+                      category: category === "nao_categorizado" ? "pessoal" : (category as any),
+                    });
+                  } catch { /* ignore duplicates */ }
+                }
+              }
               totalImported++;
             }
           }
@@ -222,7 +251,7 @@ export const pluggyRouter = router({
       transactionIds: z.array(z.number()).max(50),
     }))
     .mutation(async ({ ctx, input }) => {
-      const VALID_CATEGORIES = ["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"] as const;
+      const VALID_CATEGORIES = ["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"] as const;
 
       // Get the transactions to categorize
       const allUncategorized = await db.getUncategorizedTransactions(ctx.user.id, 200);

@@ -21,8 +21,8 @@
   --color-secondary-foreground: oklch(0.80 0.01 250);
   --color-muted: oklch(0.16 0.015 250);
   --color-muted-foreground: oklch(0.55 0.01 250);
-  --color-accent: oklch(0.72 0.18 165);
-  --color-accent-foreground: oklch(0.09 0.015 250);
+  --color-accent: oklch(0.18 0.015 250);
+  --color-accent-foreground: oklch(0.90 0.01 250);
   --color-destructive: oklch(0.60 0.22 25);
   --color-destructive-foreground: oklch(0.98 0.005 0);
   --color-border: oklch(0.22 0.015 250);
@@ -44,6 +44,8 @@
   --color-transporte: oklch(0.65 0.18 200);
   --color-saude: oklch(0.72 0.18 165);
   --color-outros: oklch(0.55 0.01 250);
+  --color-pessoal: oklch(0.68 0.16 330);
+  --color-imprevistos: oklch(0.78 0.18 80);
 
   /* Typography */
   --font-sans: "Inter", system-ui, sans-serif;
@@ -181,6 +183,21 @@
     @apply mx-auto px-4 sm:px-6 lg:px-8;
     max-width: 1400px;
   }
+
+  /* Safe areas for mobile notch/home indicator */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Stagger animation utility */
+  .stagger-item {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: count-up 0.35s var(--ease-out) forwards;
+  }
 }
 
 /* ─── Animation Keyframes ──────────────────────────────────────────────────── */
@@ -259,4 +276,58 @@ input:focus, textarea:focus {
 
 .recharts-tooltip-item {
   color: oklch(0.80 0.01 250) !important;
+}
+
+/* ─── Accessibility ───────────────────────────────────────────────────────── */
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .stagger-item {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .animate-shimmer,
+  .animate-pulse-glow,
+  .animate-count-up {
+    animation: none;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
+  }
+
+  .card-hover:hover {
+    transform: none;
+  }
+}
+
+/* Touch targets - ensure minimum 44px for all interactive elements */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"],
+  select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Compact buttons in lists can use padding to reach 44px */
+  .compact-touch {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
 }

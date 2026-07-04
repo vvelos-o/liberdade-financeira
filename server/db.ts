@@ -18,6 +18,8 @@ import {
   qolExpenses,
   users,
   categoryRules,
+  monthlyInsights,
+  DEFAULT_CATEGORY_PERCENTAGES,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -93,7 +95,7 @@ export async function upsertBudgetSettings(
   userId: number,
   year: number,
   month: number,
-  data: { baseMonthlyBudget?: string; investmentRate?: string; annualReturnRate?: string }
+  data: { baseMonthlyBudget?: string; investmentRate?: string; annualReturnRate?: string; investmentTarget?: string; categoryPercentages?: Record<string, number> }
 ) {
   const db = await getDb();
   if (!db) return;
@@ -211,7 +213,7 @@ export async function createQolExpense(
   data: {
     year: number;
     month: number;
-    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros";
+    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos";
     paymentType: "credit_card" | "cash";
     description: string;
     amount: string;
@@ -226,7 +228,7 @@ export async function createQolExpense(
   return result[0];
 }
 
-export async function updateQolExpense(id: number, userId: number, data: Partial<{ description: string; amount: string; category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros"; paymentType: "credit_card" | "cash"; creditCardId: number; transactionDate: Date }>) {
+export async function updateQolExpense(id: number, userId: number, data: Partial<{ description: string; amount: string; category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos"; paymentType: "credit_card" | "cash"; creditCardId: number; transactionDate: Date }>) {
   const db = await getDb();
   if (!db) return;
   await db.update(qolExpenses).set(data).where(and(eq(qolExpenses.id, id), eq(qolExpenses.userId, userId)));
@@ -268,7 +270,7 @@ export async function createInstallmentExpense(
     startYear: number;
     startMonth: number;
     creditCardId?: number;
-    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros";
+    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos";
   }
 ) {
   const db = await getDb();
@@ -331,7 +333,7 @@ export async function createPlannedExpense(
     year: number;
     month: number;
     paymentType: "credit_card" | "cash";
-    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros";
+    category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos";
     creditCardId?: number;
     transactionDate: Date;
   }
@@ -342,7 +344,7 @@ export async function createPlannedExpense(
   return result[0];
 }
 
-export async function updatePlannedExpense(id: number, userId: number, data: Partial<{ description: string; amount: string; isPaid: boolean; category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros"; paymentType: "credit_card" | "cash"; creditCardId: number }>) {
+export async function updatePlannedExpense(id: number, userId: number, data: Partial<{ description: string; amount: string; isPaid: boolean; category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos"; paymentType: "credit_card" | "cash"; creditCardId: number }>) {
   const db = await getDb();
   if (!db) return;
   await db.update(plannedExpenses).set(data).where(and(eq(plannedExpenses.id, id), eq(plannedExpenses.userId, userId)));
@@ -415,6 +417,8 @@ export async function createFinancialGoal(
     targetDate?: Date;
     period?: string;
     notes?: string;
+    goalType?: "commitment" | "optional";
+    suggestedMonthlyAmount?: string;
   }
 ) {
   const db = await getDb();
@@ -521,7 +525,7 @@ export async function upsertPluggyTransaction(
 export async function updatePluggyTransactionCategory(
   id: number,
   userId: number,
-  category: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado"
+  category: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado"
 ) {
   const db = await getDb();
   if (!db) return;
@@ -549,7 +553,7 @@ export async function bulkUpdatePluggyTransactionCategories(
     await db
       .update(pluggyTransactions)
       .set({
-        category: category as "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado",
+        category: category as "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado",
         isReviewed: true,
       })
       .where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
@@ -754,4 +758,162 @@ export async function deleteCategoryRule(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(categoryRules).where(and(eq(categoryRules.id, id), eq(categoryRules.userId, userId)));
+}
+
+// ─── Monthly Insights ────────────────────────────────────────────────────────
+
+export async function getMonthlyInsight(userId: number, year: number, month: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(monthlyInsights)
+    .where(and(eq(monthlyInsights.userId, userId), eq(monthlyInsights.year, year), eq(monthlyInsights.month, month)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function generateMonthlyInsight(userId: number, year: number, month: number) {
+  // Get previous month data for comparison
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+
+  const currentSummary = await getDashboardSummary(userId, year, month);
+  const prevSummary = await getDashboardSummary(userId, prevYear, prevMonth);
+
+  if (!currentSummary && !prevSummary) {
+    return null;
+  }
+
+  // Build insight based on data comparison
+  const { invokeLLM } = await import("./_core/llm");
+
+  const prompt = `Você é um consultor financeiro pessoal. Gere UM insight curto e acionável (máximo 2 frases) para o usuário baseado nos dados abaixo.
+
+Mês anterior (${prevYear}/${prevMonth}):
+- Renda: R$ ${prevSummary?.totalIncome?.toFixed(2) ?? "0"}
+- Gastos fixos: R$ ${prevSummary?.totalFixed?.toFixed(2) ?? "0"}
+- Gastos variáveis: R$ ${prevSummary?.totalQol?.toFixed(2) ?? "0"}
+- Categorias: ${JSON.stringify(prevSummary?.qolByCategory ?? [])}
+
+Mês atual (${year}/${month}):
+- Renda: R$ ${currentSummary?.totalIncome?.toFixed(2) ?? "0"}
+- Gastos fixos: R$ ${currentSummary?.totalFixed?.toFixed(2) ?? "0"}
+- Gastos variáveis: R$ ${currentSummary?.totalQol?.toFixed(2) ?? "0"}
+- Categorias: ${JSON.stringify(currentSummary?.qolByCategory ?? [])}
+
+Regras:
+- Seja específico com valores em R$
+- Sugira uma ação concreta
+- Use tom amigável mas direto
+- Responda APENAS o insight, sem título ou prefixo`;
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: "Você é um consultor financeiro pessoal brasileiro. Responda em português." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const rawContent = response.choices?.[0]?.message?.content;
+    const content = typeof rawContent === "string" ? rawContent : "";
+    if (!content) return null;
+
+    const db = await getDb();
+    if (!db) return null;
+
+    await db
+      .insert(monthlyInsights)
+      .values({ userId, year, month, content })
+      .onDuplicateKeyUpdate({ set: { content, isDismissed: false } });
+
+    return { content, isDismissed: false };
+  } catch (error) {
+    console.error("[Insights] Failed to generate:", error);
+    return null;
+  }
+}
+
+export async function dismissMonthlyInsight(userId: number, year: number, month: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(monthlyInsights)
+    .set({ isDismissed: true })
+    .where(and(eq(monthlyInsights.userId, userId), eq(monthlyInsights.year, year), eq(monthlyInsights.month, month)));
+}
+
+// ─── Dashboard Funnel (new v2 model) ────────────────────────────────────────
+
+export async function getDashboardFunnel(userId: number, year: number, month: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // 1. Total income
+  const incomeResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
+    .from(incomeEntries)
+    .where(and(eq(incomeEntries.userId, userId), eq(incomeEntries.year, year), eq(incomeEntries.month, month)));
+  const totalIncome = parseFloat(incomeResult[0]?.total ?? "0");
+
+  // 2. Fixed expenses
+  const fixedResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
+    .from(fixedExpenseEntries)
+    .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
+  const totalFixed = parseFloat(fixedResult[0]?.total ?? "0");
+
+  // 3. Budget settings (investment target + category percentages)
+  const budget = await getBudgetSettings(userId, year, month);
+  const investmentTarget = parseFloat(budget?.investmentTarget ?? "1000");
+  const categoryPercentages = budget?.categoryPercentages ?? DEFAULT_CATEGORY_PERCENTAGES;
+
+  // 4. Installments for this month (compromissos)
+  const installmentResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${installmentExpenseMonths.amount}), 0)` })
+    .from(installmentExpenseMonths)
+    .where(and(eq(installmentExpenseMonths.userId, userId), eq(installmentExpenseMonths.year, year), eq(installmentExpenseMonths.month, month)));
+  const totalInstallments = parseFloat(installmentResult[0]?.total ?? "0");
+
+  // 5. Planned expenses for this month (compromissos)
+  const plannedResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${plannedExpenses.amount}), 0)` })
+    .from(plannedExpenses)
+    .where(and(eq(plannedExpenses.userId, userId), eq(plannedExpenses.year, year), eq(plannedExpenses.month, month)));
+  const totalPlanned = parseFloat(plannedResult[0]?.total ?? "0");
+
+  const totalCompromissos = totalInstallments + totalPlanned;
+
+  // 6. Available for variable spending
+  const disponivel = Math.max(0, totalIncome - totalFixed - investmentTarget - totalCompromissos);
+
+  // 7. Actual spending per variable category (from qol_expenses)
+  const qolByCategory = await db
+    .select({
+      category: qolExpenses.category,
+      total: sql<string>`COALESCE(SUM(${qolExpenses.amount}), 0)`,
+    })
+    .from(qolExpenses)
+    .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year), eq(qolExpenses.month, month)))
+    .groupBy(qolExpenses.category);
+
+  // Build category budgets and spending
+  const categories = Object.entries(categoryPercentages).map(([cat, pct]) => {
+    const budget = disponivel * (pct as number);
+    const spent = parseFloat(qolByCategory.find(r => r.category === cat)?.total ?? "0");
+    return { category: cat, budget, spent, percentage: pct as number };
+  });
+
+  return {
+    totalIncome,
+    totalFixed,
+    investmentTarget,
+    totalCompromissos,
+    totalInstallments,
+    totalPlanned,
+    disponivel,
+    categories,
+    categoryPercentages,
+  };
 }

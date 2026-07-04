@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
-import { Utensils, Car, Heart, Gamepad2, MoreHorizontal, TrendingUp, Home, Briefcase } from "lucide-react";
+import { Utensils, Car, Heart, Gamepad2, MoreHorizontal, TrendingUp, Home, Briefcase, ShoppingBag, Shield } from "lucide-react";
 
-export type FinanceCategory = "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado";
+export type FinanceCategory = "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos" | "receita" | "fixo" | "investimento" | "nao_categorizado";
 
 const CATEGORY_CONFIG: Record<FinanceCategory, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   lazer: { label: "Lazer", icon: Gamepad2, color: "text-purple-400", bg: "bg-purple-400/10" },
@@ -9,6 +9,8 @@ const CATEGORY_CONFIG: Record<FinanceCategory, { label: string; icon: React.Elem
   transporte: { label: "Transporte", icon: Car, color: "text-blue-400", bg: "bg-blue-400/10" },
   saude: { label: "Saúde", icon: Heart, color: "text-emerald-400", bg: "bg-emerald-400/10" },
   outros: { label: "Outros", icon: MoreHorizontal, color: "text-gray-400", bg: "bg-gray-400/10" },
+  pessoal: { label: "Pessoal", icon: ShoppingBag, color: "text-pink-400", bg: "bg-pink-400/10" },
+  imprevistos: { label: "Imprevistos", icon: Shield, color: "text-amber-400", bg: "bg-amber-400/10" },
   receita: { label: "Receita", icon: TrendingUp, color: "text-green-400", bg: "bg-green-400/10" },
   fixo: { label: "Fixo", icon: Home, color: "text-yellow-400", bg: "bg-yellow-400/10" },
   investimento: { label: "Investimento", icon: Briefcase, color: "text-teal-400", bg: "bg-teal-400/10" },
@@ -44,10 +46,24 @@ export function getCategoryConfig(category: FinanceCategory) {
   return CATEGORY_CONFIG[category] ?? CATEGORY_CONFIG.nao_categorizado;
 }
 
-export const CATEGORY_COLORS = {
+export const CATEGORY_COLORS: Record<string, string> = {
   lazer: "#a855f7",
   alimentacao: "#f97316",
   transporte: "#60a5fa",
   saude: "#34d399",
   outros: "#9ca3af",
+  pessoal: "#f472b6",
+  imprevistos: "#fbbf24",
+};
+
+export const VARIABLE_CATEGORIES = ["lazer", "alimentacao", "saude", "transporte", "pessoal", "imprevistos"] as const;
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  lazer: "Lazer",
+  alimentacao: "Alimentação",
+  transporte: "Transporte",
+  saude: "Saúde",
+  outros: "Outros",
+  pessoal: "Pessoal",
+  imprevistos: "Imprevistos",
 };

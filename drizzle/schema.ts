@@ -2,6 +2,7 @@ import {
   boolean,
   decimal,
   int,
+  json,
   mysqlEnum,
   mysqlTable,
   text,
@@ -10,6 +11,11 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
+
+// ─── Category Enums (shared) ─────────────────────────────────────────────────
+
+const variableCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos"] as const;
+const fullCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos", "receita", "fixo", "investimento", "nao_categorizado"] as const;
 
 // ─── Core Auth ────────────────────────────────────────────────────────────────
 
@@ -34,10 +40,12 @@ export const budgetSettings = mysqlTable("budget_settings", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   year: int("year").notNull(),
-  month: int("month").notNull(), // 1-12
+  month: int("month").notNull(),
   baseMonthlyBudget: decimal("baseMonthlyBudget", { precision: 12, scale: 2 }).default("0.00").notNull(),
-  investmentRate: decimal("investmentRate", { precision: 5, scale: 4 }).default("0.1500").notNull(), // % poupada para investir
-  annualReturnRate: decimal("annualReturnRate", { precision: 5, scale: 4 }).default("0.1500").notNull(), // índice retorno anual
+  investmentTarget: decimal("investmentTarget", { precision: 12, scale: 2 }).default("1000.00"),
+  investmentRate: decimal("investmentRate", { precision: 5, scale: 4 }).default("0.1500").notNull(),
+  annualReturnRate: decimal("annualReturnRate", { precision: 5, scale: 4 }).default("0.1500").notNull(),
+  categoryPercentages: json("categoryPercentages").$type<Record<string, number>>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
@@ -64,7 +72,7 @@ export const incomeEntries = mysqlTable("income_entries", {
   userId: int("userId").notNull(),
   sourceId: int("sourceId").notNull(),
   year: int("year").notNull(),
-  month: int("month").notNull(), // 1-12
+  month: int("month").notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).default("0.00").notNull(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -110,13 +118,13 @@ export const qolExpenses = mysqlTable("qol_expenses", {
   userId: int("userId").notNull(),
   year: int("year").notNull(),
   month: int("month").notNull(),
-  category: mysqlEnum("category", ["lazer", "alimentacao", "transporte", "saude", "outros"]).notNull(),
+  category: mysqlEnum("category", variableCategoryEnum).notNull(),
   paymentType: mysqlEnum("paymentType", ["credit_card", "cash"]).notNull(),
   description: varchar("description", { length: 255 }).notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
-  creditCardId: int("creditCardId"), // null if cash
+  creditCardId: int("creditCardId"),
   transactionDate: timestamp("transactionDate").notNull(),
-  pluggyTransactionId: varchar("pluggyTransactionId", { length: 128 }), // linked Pluggy tx
+  pluggyTransactionId: varchar("pluggyTransactionId", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
@@ -137,7 +145,7 @@ export const installmentExpenses = mysqlTable("installment_expenses", {
   startYear: int("startYear").notNull(),
   startMonth: int("startMonth").notNull(),
   creditCardId: int("creditCardId"),
-  category: mysqlEnum("category", ["lazer", "alimentacao", "transporte", "saude", "outros"]).default("outros").notNull(),
+  category: mysqlEnum("category", variableCategoryEnum).default("outros").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -151,7 +159,7 @@ export const installmentExpenseMonths = mysqlTable("installment_expense_months",
   userId: int("userId").notNull(),
   year: int("year").notNull(),
   month: int("month").notNull(),
-  installmentNumber: int("installmentNumber").notNull(), // 1-based
+  installmentNumber: int("installmentNumber").notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   isPaid: boolean("isPaid").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -170,7 +178,7 @@ export const plannedExpenses = mysqlTable("planned_expenses", {
   year: int("year").notNull(),
   month: int("month").notNull(),
   paymentType: mysqlEnum("paymentType", ["credit_card", "cash"]).notNull(),
-  category: mysqlEnum("category", ["lazer", "alimentacao", "transporte", "saude", "outros"]).default("outros").notNull(),
+  category: mysqlEnum("category", variableCategoryEnum).default("outros").notNull(),
   creditCardId: int("creditCardId"),
   transactionDate: timestamp("transactionDate").notNull(),
   isPaid: boolean("isPaid").default(false).notNull(),
@@ -187,7 +195,7 @@ export const creditCards = mysqlTable("credit_cards", {
   userId: int("userId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   lastFourDigits: varchar("lastFourDigits", { length: 4 }),
-  color: varchar("color", { length: 7 }).default("#6366f1").notNull(), // hex color
+  color: varchar("color", { length: 7 }).default("#6366f1").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -216,17 +224,34 @@ export const financialGoals = mysqlTable("financial_goals", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
+  goalType: mysqlEnum("goalType", ["commitment", "optional"]).default("optional").notNull(),
   targetAmount: decimal("targetAmount", { precision: 12, scale: 2 }).notNull(),
   currentAmount: decimal("currentAmount", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  suggestedMonthlyAmount: decimal("suggestedMonthlyAmount", { precision: 12, scale: 2 }),
   targetDate: timestamp("targetDate"),
   achievedDate: timestamp("achievedDate"),
-  period: varchar("period", { length: 64 }), // e.g. "2025-2026"
+  period: varchar("period", { length: 64 }),
   isAchieved: boolean("isAchieved").default(false).notNull(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   userIdx: index("financial_goals_user_idx").on(t.userId),
+}));
+
+// ─── Monthly Insights ─────────────────────────────────────────────────────────
+
+export const monthlyInsights = mysqlTable("monthly_insights", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  year: int("year").notNull(),
+  month: int("month").notNull(),
+  content: text("content").notNull(),
+  isDismissed: boolean("isDismissed").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  userYearMonthIdx: uniqueIndex("monthly_insights_user_year_month").on(t.userId, t.year, t.month),
 }));
 
 // ─── Pluggy Integration ───────────────────────────────────────────────────────
@@ -255,9 +280,9 @@ export const pluggyTransactions = mysqlTable("pluggy_transactions", {
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   type: mysqlEnum("type", ["debit", "credit"]).notNull(),
   transactionDate: timestamp("transactionDate").notNull(),
-  category: mysqlEnum("category", ["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]).default("nao_categorizado").notNull(),
+  category: mysqlEnum("category", fullCategoryEnum).default("nao_categorizado").notNull(),
   isReviewed: boolean("isReviewed").default(false).notNull(),
-  linkedExpenseId: int("linkedExpenseId"), // linked to qol_expenses or planned_expenses
+  linkedExpenseId: int("linkedExpenseId"),
   linkedExpenseType: mysqlEnum("linkedExpenseType", ["qol", "planned", "installment", "fixed"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -271,9 +296,9 @@ export const pluggyTransactions = mysqlTable("pluggy_transactions", {
 export const categoryRules = mysqlTable("category_rules", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  pattern: varchar("pattern", { length: 500 }).notNull(), // description pattern (e.g. "UBER", "IFOOD", "PIX JOAO")
-  category: mysqlEnum("category", ["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]).notNull(),
-  confidence: int("confidence").default(1).notNull(), // how many times this rule was confirmed
+  pattern: varchar("pattern", { length: 500 }).notNull(),
+  category: mysqlEnum("category", fullCategoryEnum).notNull(),
+  confidence: int("confidence").default(1).notNull(),
   source: mysqlEnum("source", ["user_correction", "manual"]).default("user_correction").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -282,7 +307,7 @@ export const categoryRules = mysqlTable("category_rules", {
   patternIdx: index("category_rules_pattern_idx").on(t.userId, t.pattern),
 }));
 
-// ─── Type Exports ─────────────────────────────────────────────────────────────
+// ─── Type Exports ────────────────────────────────────────────────────────────
 
 export type BudgetSettings = typeof budgetSettings.$inferSelect;
 export type IncomeSource = typeof incomeSources.$inferSelect;
@@ -296,6 +321,21 @@ export type PlannedExpense = typeof plannedExpenses.$inferSelect;
 export type CreditCard = typeof creditCards.$inferSelect;
 export type CreditCardMonthly = typeof creditCardMonthly.$inferSelect;
 export type FinancialGoal = typeof financialGoals.$inferSelect;
+export type MonthlyInsight = typeof monthlyInsights.$inferSelect;
 export type PluggyConnection = typeof pluggyConnections.$inferSelect;
 export type PluggyTransaction = typeof pluggyTransactions.$inferSelect;
 export type CategoryRule = typeof categoryRules.$inferSelect;
+
+// ─── Shared Constants ────────────────────────────────────────────────────────
+
+export const VARIABLE_CATEGORIES = variableCategoryEnum;
+export const FULL_CATEGORIES = fullCategoryEnum;
+
+export const DEFAULT_CATEGORY_PERCENTAGES: Record<string, number> = {
+  lazer: 0.28,
+  alimentacao: 0.28,
+  saude: 0.18,
+  transporte: 0.08,
+  pessoal: 0.10,
+  imprevistos: 0.08,
+};
