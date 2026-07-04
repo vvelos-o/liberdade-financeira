@@ -151,6 +151,9 @@ export const pluggyRouter = router({
       const connections = await db.getPluggyConnections(ctx.user.id);
       const targetConnections = input.itemId ? connections.filter((c) => c.pluggyItemId === input.itemId) : connections;
 
+      // Fetch learned rules BEFORE the sync loop so we can apply them
+      const learnedRules = await db.getCategoryRules(ctx.user.id);
+
       let totalImported = 0;
       for (const conn of targetConnections) {
         try {
@@ -158,8 +161,16 @@ export const pluggyRouter = router({
           for (const account of accounts) {
             const transactions = await getPluggyTransactions(apiKey, account.id, input.fromDate, input.toDate);
             for (const tx of transactions) {
-              const category = autoCategorize(tx.description ?? "");
               const desc = tx.description ?? "";
+              // 1. Check learned rules first (higher priority, user-corrected)
+              const matchedRule = learnedRules.find(r => desc.toUpperCase().includes(r.pattern.toUpperCase()));
+              let category: string;
+              if (matchedRule) {
+                category = matchedRule.category;
+              } else {
+                // 2. Fall back to keyword-based auto-categorization
+                category = autoCategorize(desc);
+              }
               const amount = Math.abs(tx.amount ?? 0);
 
               await db.upsertPluggyTransaction(ctx.user.id, {
@@ -170,7 +181,7 @@ export const pluggyRouter = router({
                 amount: String(amount),
                 type: (tx.amount ?? 0) < 0 ? "debit" : "credit",
                 transactionDate: new Date(tx.date ?? Date.now()),
-                category,
+                category: category as any,
               });
 
               // Auto-detect installments (X/Y pattern like "KABUM 3/8" or "PARCELA 2 DE 6")
@@ -222,7 +233,7 @@ export const pluggyRouter = router({
   updateCategory: protectedProcedure
     .input(z.object({
       id: z.number(),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
     }))
     .mutation(({ ctx, input }) =>
       db.updatePluggyTransactionCategory(input.id, ctx.user.id, input.category)
@@ -335,12 +346,13 @@ Responda APENAS com JSON no formato:
     .input(z.object({
       updates: z.array(z.object({
         id: z.number(),
-        category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+        category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
       })),
     }))
-    .mutation(({ ctx, input }) =>
-      db.bulkUpdatePluggyTransactionCategories(input.updates, ctx.user.id)
-    ),
+    .mutation(async ({ ctx, input }) => {
+      await db.bulkUpdatePluggyTransactionCategories(input.updates, ctx.user.id);
+      return { applied: input.updates.length };
+    }),
 
   // ─── Category Rules (Learned AI) ────────────────────────────────────────────
 
@@ -349,7 +361,7 @@ Responda APENAS com JSON no formato:
   saveRule: protectedProcedure
     .input(z.object({
       pattern: z.string().min(1),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
       source: z.enum(["user_correction", "manual"]).default("user_correction"),
     }))
     .mutation(({ ctx, input }) =>
@@ -364,7 +376,7 @@ Responda APENAS com JSON no formato:
   correctCategory: protectedProcedure
     .input(z.object({
       transactionId: z.number(),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
       description: z.string(), // the transaction description to use as pattern
     }))
     .mutation(async ({ ctx, input }) => {

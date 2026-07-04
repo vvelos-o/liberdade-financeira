@@ -189,12 +189,19 @@ export default function Historico() {
   // Build investment data - use investmentTarget from budget settings
   const { data: budgetSettings } = trpc.budget.get.useQuery({ year, month });
   const investmentData = useMemo(() => {
-    const target = budgetSettings?.investmentTarget ? parseFloat(budgetSettings.investmentTarget) : 1000;
-    return Array.from({ length: month }, (_, i) => ({
-      month: i + 1,
-      invested: target,
-    }));
-  }, [budgetSettings, month]);
+    const target = budgetSettings?.investmentTarget ? parseFloat(budgetSettings.investmentTarget) : 0;
+    if (target === 0) return [];
+    // Only count from July 2026 forward
+    const startYear = 2026;
+    const startMonth = 7;
+    const monthsSinceStart = (year - startYear) * 12 + (month - startMonth) + 1;
+    if (monthsSinceStart <= 0) return [];
+    return Array.from({ length: monthsSinceStart }, (_, i) => {
+      const m = startMonth + i;
+      const adjustedMonth = m > 12 ? m - 12 : m;
+      return { month: adjustedMonth, invested: target };
+    });
+  }, [budgetSettings, year, month]);
 
   if (loadingCurrent) {
     return (

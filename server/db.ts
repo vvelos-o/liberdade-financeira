@@ -117,7 +117,7 @@ export async function createIncomeSource(userId: number, data: { name: string; t
   const db = await getDb();
   if (!db) return null;
   const result = await db.insert(incomeSources).values({ userId, ...data });
-  return result[0];
+  return { id: (result[0] as any).insertId as number };
 }
 
 export async function updateIncomeSource(id: number, userId: number, data: Partial<{ name: string; type: "fixed" | "variable" | "extra"; sortOrder: number; isActive: boolean }>) {
@@ -164,7 +164,8 @@ export async function getFixedExpenseCategories(userId: number) {
 export async function createFixedExpenseCategory(userId: number, data: { name: string; sortOrder?: number }) {
   const db = await getDb();
   if (!db) return null;
-  return db.insert(fixedExpenseCategories).values({ userId, ...data });
+  const result = await db.insert(fixedExpenseCategories).values({ userId, ...data });
+  return { id: (result[0] as any).insertId as number };
 }
 
 export async function updateFixedExpenseCategory(id: number, userId: number, data: Partial<{ name: string; sortOrder: number; isActive: boolean }>) {
@@ -511,15 +512,23 @@ export async function upsertPluggyTransaction(
     amount: string;
     type: "debit" | "credit";
     transactionDate: Date;
-    category?: "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado";
+    category?: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado";
   }
 ) {
   const db = await getDb();
   if (!db) return;
+  const categoryValue = data.category ?? "nao_categorizado";
   await db
     .insert(pluggyTransactions)
-    .values({ userId, ...data })
-    .onDuplicateKeyUpdate({ set: { description: data.description, amount: data.amount, category: data.category ?? "nao_categorizado" } });
+    .values({ userId, ...data, category: categoryValue })
+    .onDuplicateKeyUpdate({
+      set: {
+        description: data.description,
+        amount: data.amount,
+        // Only update category if the existing row has NOT been reviewed by the user
+        category: sql`IF(${pluggyTransactions.isReviewed} = 0, ${categoryValue}, ${pluggyTransactions.category})`,
+      },
+    });
 }
 
 export async function updatePluggyTransactionCategory(
@@ -866,7 +875,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
 
   // 3. Budget settings (investment target + category percentages)
   const budget = await getBudgetSettings(userId, year, month);
-  const investmentTarget = parseFloat(budget?.investmentTarget ?? "1000");
+  const investmentTarget = parseFloat(budget?.investmentTarget ?? "0");
   const categoryPercentages = budget?.categoryPercentages ?? DEFAULT_CATEGORY_PERCENTAGES;
 
   // 4. Installments for this month (compromissos)

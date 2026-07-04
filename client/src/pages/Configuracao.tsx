@@ -334,11 +334,11 @@ function CategoryPercentagesSection() {
         ? (typeof settings.categoryPercentages === "string" ? JSON.parse(settings.categoryPercentages) : settings.categoryPercentages)
         : { lazer: 28, alimentacao: 28, saude: 18, transporte: 8, pessoal: 10, imprevistos: 8 };
       setPercentages(parsed);
-      setInvestmentTarget(settings.investmentTarget ?? "1000");
+      setInvestmentTarget(settings.investmentTarget ?? "0");
     } else {
       // Default values when no settings exist yet
       setPercentages({ lazer: 28, alimentacao: 28, saude: 18, transporte: 8, pessoal: 10, imprevistos: 8 });
-      setInvestmentTarget("1000");
+      setInvestmentTarget("0");
     }
   }, [settings]);
 

@@ -244,3 +244,11 @@
 - [x] Micro-interactions (press, stagger, transitions)
 - [x] Accessibility audit (contrast, touch targets 44px, aria)
 - [x] prefers-reduced-motion support (added to index.css)
+
+## ═══ BUG FIXES (Reported Jul 4, 2026) ═══
+
+- [x] BUG: AI categorization not working (fixed: added pessoal/imprevistos to z.enum, applyCategories returns {applied})
+- [x] BUG: Salary added successfully but not displaying in UI (fixed: createIncomeSource returns {id: insertId})
+- [x] BUG: Sync resets previously categorized transactions (fixed: upsert preserves reviewed categories, rules applied first)
+- [x] BUG: Investment showing R$1000/month incorrectly (fixed: default changed to 0)
+- [x] CHANGE: Only consider data from July 2026 forward (fixed: Historico counts from July 2026)
