@@ -252,3 +252,8 @@
 - [x] BUG: Sync resets previously categorized transactions (fixed: upsert preserves reviewed categories, rules applied first)
 - [x] BUG: Investment showing R$1000/month incorrectly (fixed: default changed to 0)
 - [x] CHANGE: Only consider data from July 2026 forward (fixed: Historico counts from July 2026)
+
+## ═══ FEATURE: Copiar Mês Anterior (Jul 4, 2026) ═══
+
+- [x] Botão "Copiar mês anterior" na seção Rendas (Configuração) - pré-preenche valores do mês passado, editáveis antes de salvar
+- [x] Botão "Copiar mês anterior" na seção Gastos Fixos (Configuração) - pré-preenche valores do mês passado, editáveis antes de salvar

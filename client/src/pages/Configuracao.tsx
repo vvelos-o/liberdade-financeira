@@ -4,7 +4,7 @@ import { formatMoney } from "@/components/finance/MoneyDisplay";
 import { CATEGORY_LABELS, VARIABLE_CATEGORIES, CATEGORY_COLORS } from "@/components/finance/CategoryBadge";
 import { cn } from "@/lib/utils";
 import {
-  DollarSign, Home, Target, Percent, BookOpen, Link2, Plus, Trash2, Save, Edit2, Check, X, CreditCard,
+  DollarSign, Home, Target, Percent, BookOpen, Link2, Plus, Trash2, Save, Edit2, Check, X, CreditCard, Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,11 @@ import { toast } from "sonner";
 
 function IncomeSection() {
   const { year, month } = useMonth();
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
   const { data: sources, isLoading: loadingSources } = trpc.income.getSources.useQuery();
   const { data: entries, isLoading: loadingEntries } = trpc.income.getEntries.useQuery({ year, month });
+  const { data: prevEntries } = trpc.income.getEntries.useQuery({ year: prevYear, month: prevMonth });
   const createMutation = trpc.income.createSource.useMutation();
   const upsertEntryMutation = trpc.income.upsertEntry.useMutation();
   const deleteMutation = trpc.income.deleteSource.useMutation();
@@ -32,6 +35,38 @@ function IncomeSection() {
   const [newAmount, setNewAmount] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState("");
+  const [copying, setCopying] = useState(false);
+
+  // Show copy button if previous month has entries that current month is missing
+  const currentSourceIds = new Set((entries ?? []).map((e: any) => e.sourceId));
+  const missingFromPrev = (prevEntries ?? []).filter((e: any) => !currentSourceIds.has(e.sourceId));
+  const showCopyButton = missingFromPrev.length > 0;
+
+  const handleCopyPrevious = async () => {
+    if (!missingFromPrev.length || !sources) return;
+    setCopying(true);
+    try {
+      for (const entry of missingFromPrev) {
+        // Only copy if source is still active
+        const source = sources.find((s: any) => s.id === entry.sourceId && s.isActive);
+        if (source) {
+          await upsertEntryMutation.mutateAsync({
+            sourceId: entry.sourceId,
+            year,
+            month,
+            amount: entry.amount,
+          });
+        }
+      }
+      utils.income.getEntries.invalidate();
+      utils.dashboard.getFunnel.invalidate();
+      toast.success("Valores copiados. Clique em qualquer valor para editar.");
+    } catch {
+      toast.error("Erro ao copiar valores.");
+    } finally {
+      setCopying(false);
+    }
+  };
 
   const getEntryAmount = (sourceId: number) => {
     const entry = entries?.find((e: any) => e.sourceId === sourceId);
@@ -140,6 +175,18 @@ function IncomeSection() {
                 </div>
               );
             })}
+            {showCopyButton && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPrevious}
+                disabled={copying}
+                className="w-full h-8 text-xs border-primary/30 text-primary hover:bg-primary/10"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                {copying ? "Copiando..." : "Copiar valores do mês anterior"}
+              </Button>
+            )}
             {showAdd ? (
               <div className="space-y-2 pt-2 border-t border-border">
                 <Input placeholder="Descrição (ex: Salário CLT)" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" />
@@ -176,8 +223,11 @@ function IncomeSection() {
 
 function FixedExpensesSection() {
   const { year, month } = useMonth();
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
   const { data: categories, isLoading: loadingCats } = trpc.fixedExpenses.getCategories.useQuery();
   const { data: entries, isLoading: loadingEntries } = trpc.fixedExpenses.getEntries.useQuery({ year, month });
+  const { data: prevEntries } = trpc.fixedExpenses.getEntries.useQuery({ year: prevYear, month: prevMonth });
   const createMutation = trpc.fixedExpenses.createCategory.useMutation();
   const upsertEntryMutation = trpc.fixedExpenses.upsertEntry.useMutation();
   const updateCatMutation = trpc.fixedExpenses.updateCategory.useMutation();
@@ -188,6 +238,38 @@ function FixedExpensesSection() {
   const [newAmount, setNewAmount] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState("");
+  const [copying, setCopying] = useState(false);
+
+  // Show copy button if previous month has entries that current month is missing
+  const currentCatIds = new Set((entries ?? []).map((e: any) => e.categoryId));
+  const missingFromPrev = (prevEntries ?? []).filter((e: any) => !currentCatIds.has(e.categoryId));
+  const showCopyButton = missingFromPrev.length > 0;
+
+  const handleCopyPrevious = async () => {
+    if (!missingFromPrev.length || !categories) return;
+    setCopying(true);
+    try {
+      for (const entry of missingFromPrev) {
+        // Only copy if category is still active
+        const cat = categories.find((c: any) => c.id === entry.categoryId && c.isActive);
+        if (cat) {
+          await upsertEntryMutation.mutateAsync({
+            categoryId: entry.categoryId,
+            year,
+            month,
+            amount: entry.amount,
+          });
+        }
+      }
+      utils.fixedExpenses.getEntries.invalidate();
+      utils.dashboard.getFunnel.invalidate();
+      toast.success("Valores copiados. Clique em qualquer valor para editar.");
+    } catch {
+      toast.error("Erro ao copiar valores.");
+    } finally {
+      setCopying(false);
+    }
+  };
 
   const getEntryAmount = (catId: number) => {
     const entry = entries?.find((e: any) => e.categoryId === catId);
@@ -291,6 +373,18 @@ function FixedExpensesSection() {
                 </div>
               );
             })}
+            {showCopyButton && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPrevious}
+                disabled={copying}
+                className="w-full h-8 text-xs border-yellow-400/30 text-yellow-400 hover:bg-yellow-400/10"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                {copying ? "Copiando..." : "Copiar valores do mês anterior"}
+              </Button>
+            )}
             {showAdd ? (
               <div className="space-y-2 pt-2 border-t border-border">
                 <Input placeholder="Descrição (ex: Aluguel, Terapia)" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" />
