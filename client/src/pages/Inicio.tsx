@@ -343,7 +343,9 @@ function MonthEndCard({ funnel }: { funnel: any }) {
 
 export default function Inicio() {
   const { year, month } = useMonth();
-  const { data: funnel, isLoading } = trpc.dashboard.getFunnel.useQuery({ year, month });
+  const { data: funnel, isLoading, error } = trpc.dashboard.getFunnel.useQuery({ year, month });
+  // Log error for debugging
+  if (error) console.error("[Inicio] getFunnel error:", error.message, error);
 
   const totalSpent = useMemo(() => {
     if (!funnel?.categories) return 0;

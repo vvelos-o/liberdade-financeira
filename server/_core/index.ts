@@ -48,6 +48,26 @@ async function startServer() {
     }
   });
 
+  // Debug endpoint for diagnosing dashboard issues
+  app.get("/api/debug/funnel", async (req, res) => {
+    const pin = req.query.pin;
+    if (pin !== process.env.APP_PIN) return res.status(403).json({ error: "Invalid PIN" });
+    const userId = parseInt(req.query.userId as string || "1");
+    const year = parseInt(req.query.year as string || "2026");
+    const month = parseInt(req.query.month as string || "7");
+    const results: Record<string, any> = { userId, year, month };
+    try {
+      const { getBudgetSettings, getDashboardFunnel } = await import("../db");
+      results.budget = await getBudgetSettings(userId, year, month);
+      results.categoryPercentagesKeys = results.budget?.categoryPercentages ? Object.keys(results.budget.categoryPercentages) : 'null/undefined';
+    } catch (e: any) { results.budgetError = e.message; }
+    try {
+      const { getDashboardFunnel } = await import("../db");
+      results.funnel = await getDashboardFunnel(userId, year, month);
+    } catch (e: any) { results.funnelError = e.message; results.funnelStack = e.stack?.split('\n').slice(0, 8); }
+    res.json(results);
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

@@ -888,6 +888,7 @@ export async function dismissMonthlyInsight(userId: number, year: number, month:
 export async function getDashboardFunnel(userId: number, year: number, month: number) {
   const db = await getDb();
   if (!db) return null;
+  try {
 
   // 1. Total income (manual + pluggy)
   const incomeResult = await db
@@ -940,7 +941,10 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   // 3. Budget settings (investment target + category percentages)
   const budget = await getBudgetSettings(userId, year, month);
   const investmentTarget = parseFloat(budget?.investmentTarget ?? "0");
-  const categoryPercentages = budget?.categoryPercentages ?? DEFAULT_CATEGORY_PERCENTAGES;
+  const rawPercentages = budget?.categoryPercentages;
+  const categoryPercentages = (rawPercentages && Object.keys(rawPercentages).length > 0)
+    ? rawPercentages
+    : DEFAULT_CATEGORY_PERCENTAGES;
 
   // 4. Installments for this month (compromissos)
   const installmentResult = await db
@@ -1018,4 +1022,22 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     categories,
     categoryPercentages,
   };
+  } catch (error) {
+    console.error("[getDashboardFunnel] Error:", error);
+    // Return safe default so frontend doesn't break
+    const defaultPercentages = DEFAULT_CATEGORY_PERCENTAGES;
+    return {
+      totalIncome: 0,
+      totalFixed: 0,
+      investmentTarget: 0,
+      totalCompromissos: 0,
+      totalInstallments: 0,
+      totalPlanned: 0,
+      disponivel: 0,
+      categories: Object.entries(defaultPercentages).map(([cat, pct]) => ({
+        category: cat, budget: 0, spent: 0, percentage: pct as number,
+      })),
+      categoryPercentages: defaultPercentages,
+    };
+  }
 }

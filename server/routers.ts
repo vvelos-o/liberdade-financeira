@@ -304,9 +304,30 @@ const dashboardRouter = router({
   getRecentTransactions: protectedProcedure
     .input(z.object({ limit: z.number().optional() }))
     .query(({ ctx, input }) => db.getRecentPluggyTransactions(ctx.user.id, input.limit ?? 10)),
-  getFunnel: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
-    db.getDashboardFunnel(ctx.user.id, input.year, input.month)
-  ),
+  getFunnel: protectedProcedure.input(yearMonthSchema).query(async ({ ctx, input }) => {
+    try {
+      const result = await db.getDashboardFunnel(ctx.user.id, input.year, input.month);
+      return result;
+    } catch (error: any) {
+      console.error("[getFunnel] CRITICAL ERROR:", error?.message, error?.stack);
+      throw error;
+    }
+  }),
+  // Diagnostic endpoint to test individual queries
+  debugFunnel: protectedProcedure.input(yearMonthSchema).query(async ({ ctx, input }) => {
+    const results: Record<string, any> = {};
+    try {
+      results.budget = await db.getBudgetSettings(ctx.user.id, input.year, input.month);
+      results.budgetKeys = results.budget ? Object.keys(results.budget) : null;
+      results.categoryPercentages = results.budget?.categoryPercentages;
+      results.categoryPercentagesType = typeof results.budget?.categoryPercentages;
+      results.categoryPercentagesEmpty = results.budget?.categoryPercentages ? Object.keys(results.budget.categoryPercentages).length === 0 : 'null';
+    } catch (e: any) { results.budgetError = e.message; }
+    try {
+      results.funnel = await db.getDashboardFunnel(ctx.user.id, input.year, input.month);
+    } catch (e: any) { results.funnelError = e.message; results.funnelStack = e.stack?.split('\n').slice(0, 5); }
+    return results;
+  }),
 });
 
 // ─── Insights Router ─────────────────────────────────────────────────────────
