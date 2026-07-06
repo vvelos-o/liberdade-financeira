@@ -724,7 +724,9 @@ export async function getDashboardSummary(userId: number, year: number, month: n
 export async function getAnnualQolHistory(userId: number, year: number) {
   const db = await getDb();
   if (!db) return [];
-  return db
+
+  // Manual qol_expenses
+  const qolData = await db
     .select({
       month: qolExpenses.month,
       category: qolExpenses.category,
@@ -733,6 +735,34 @@ export async function getAnnualQolHistory(userId: number, year: number) {
     .from(qolExpenses)
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year)))
     .groupBy(qolExpenses.month, qolExpenses.category);
+
+  // Pluggy transactions (debit, variable categories only)
+  const startDate = new Date(year, 0, 1);
+  const endDate = new Date(year, 11, 31, 23, 59, 59);
+  const pluggyData: { month: number; category: string; total: string }[] = await db.execute(
+    sql`SELECT MONTH(transactionDate) as month, category, COALESCE(SUM(amount), 0) as total
+        FROM pluggy_transactions
+        WHERE userId = ${userId} AND type = 'debit'
+          AND transactionDate >= ${startDate} AND transactionDate <= ${endDate}
+        GROUP BY MONTH(transactionDate), category`
+  ) as any;
+
+  // Merge both sources
+  const merged = new Map<string, { month: number; category: string; total: string }>();
+  for (const row of qolData) {
+    const key = `${row.month}-${row.category}`;
+    merged.set(key, { month: row.month, category: row.category, total: row.total });
+  }
+  for (const row of pluggyData) {
+    const key = `${row.month}-${row.category}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.total = String(parseFloat(existing.total) + parseFloat(row.total));
+    } else {
+      merged.set(key, { month: row.month, category: row.category as string, total: row.total });
+    }
+  }
+  return Array.from(merged.values());
 }
 
 // ─── Category Rules (Learned AI) ──────────────────────────────────────────
@@ -859,19 +889,53 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   const db = await getDb();
   if (!db) return null;
 
-  // 1. Total income
+  // 1. Total income (manual + pluggy)
   const incomeResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
     .from(incomeEntries)
     .where(and(eq(incomeEntries.userId, userId), eq(incomeEntries.year, year), eq(incomeEntries.month, month)));
-  const totalIncome = parseFloat(incomeResult[0]?.total ?? "0");
+  const manualIncome = parseFloat(incomeResult[0]?.total ?? "0");
 
-  // 2. Fixed expenses
+  // Pluggy income: credit transactions categorized as 'receita' in this month
+  const incomeStartDate = new Date(year, month - 1, 1);
+  const incomeEndDate = new Date(year, month, 0, 23, 59, 59);
+  const pluggyIncomeResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "credit"),
+        eq(pluggyTransactions.category, "receita"),
+        gte(pluggyTransactions.transactionDate, incomeStartDate),
+        lte(pluggyTransactions.transactionDate, incomeEndDate)
+      )
+    );
+  const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
+  const totalIncome = manualIncome + pluggyIncome;
+
+  // 2. Fixed expenses (manual + pluggy 'fixo' category)
   const fixedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
     .from(fixedExpenseEntries)
     .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
-  const totalFixed = parseFloat(fixedResult[0]?.total ?? "0");
+  const manualFixed = parseFloat(fixedResult[0]?.total ?? "0");
+
+  // Pluggy fixed: debit transactions categorized as 'fixo' in this month
+  const pluggyFixedResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        eq(pluggyTransactions.category, "fixo"),
+        gte(pluggyTransactions.transactionDate, incomeStartDate),
+        lte(pluggyTransactions.transactionDate, incomeEndDate)
+      )
+    );
+  const pluggyFixed = parseFloat(pluggyFixedResult[0]?.total ?? "0");
+  const totalFixed = manualFixed + pluggyFixed;
 
   // 3. Budget settings (investment target + category percentages)
   const budget = await getBudgetSettings(userId, year, month);
@@ -897,7 +961,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   // 6. Available for variable spending
   const disponivel = Math.max(0, totalIncome - totalFixed - investmentTarget - totalCompromissos);
 
-  // 7. Actual spending per variable category (from qol_expenses)
+  // 7. Actual spending per variable category (from qol_expenses + pluggy_transactions)
   const qolByCategory = await db
     .select({
       category: qolExpenses.category,
@@ -907,10 +971,39 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year), eq(qolExpenses.month, month)))
     .groupBy(qolExpenses.category);
 
+  // Also get spending from pluggy_transactions (debit, categorized, in this month)
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+  const pluggyByCategory = await db
+    .select({
+      category: pluggyTransactions.category,
+      total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
+    })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    )
+    .groupBy(pluggyTransactions.category);
+
+  // Merge spending from both sources
+  const spendingMap = new Map<string, number>();
+  for (const row of qolByCategory) {
+    spendingMap.set(row.category, (spendingMap.get(row.category) ?? 0) + parseFloat(row.total));
+  }
+  for (const row of pluggyByCategory) {
+    const cat = row.category as string;
+    spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
+  }
+
   // Build category budgets and spending
   const categories = Object.entries(categoryPercentages).map(([cat, pct]) => {
     const budget = disponivel * (pct as number);
-    const spent = parseFloat(qolByCategory.find(r => r.category === cat)?.total ?? "0");
+    const spent = spendingMap.get(cat) ?? 0;
     return { category: cat, budget, spent, percentage: pct as number };
   });
 

@@ -205,6 +205,45 @@ describe("Finance Master - Backend Procedures", () => {
       const result = await caller.pluggy.getTransactions({ year: 2026, month: 7 });
       expect(Array.isArray(result)).toBe(true);
     });
+
+    it("correctCategory updates category and creates a rule", async () => {
+      // First insert a test transaction directly via db
+      const db = await import("./db");
+      await db.upsertPluggyTransaction(1, {
+        pluggyTransactionId: "test-correct-cat-" + Date.now(),
+        pluggyItemId: "test-item",
+        description: "UBER TRIP DOWNTOWN",
+        amount: "25.00",
+        type: "debit",
+        transactionDate: new Date(2026, 6, 5), // July 5, 2026
+        category: "nao_categorizado",
+      });
+      // Get the transaction
+      const txs = await caller.pluggy.getTransactions({ year: 2026, month: 7 });
+      const testTx = txs.find((t: any) => t.description === "UBER TRIP DOWNTOWN");
+      expect(testTx).toBeDefined();
+      expect(testTx.category).toBe("nao_categorizado");
+
+      // Now correct the category
+      const result = await caller.pluggy.correctCategory({
+        transactionId: testTx.id,
+        category: "transporte",
+        description: "UBER TRIP DOWNTOWN",
+      });
+      expect(result.success).toBe(true);
+
+      // Verify the transaction was updated
+      const txsAfter = await caller.pluggy.getTransactions({ year: 2026, month: 7 });
+      const updatedTx = txsAfter.find((t: any) => t.id === testTx.id);
+      expect(updatedTx.category).toBe("transporte");
+      expect(updatedTx.isReviewed).toBe(true);
+
+      // Verify a rule was created
+      const rules = await caller.pluggy.getRules();
+      const uberRule = rules.find((r: any) => r.pattern.includes("UBER"));
+      expect(uberRule).toBeDefined();
+      expect(uberRule.category).toBe("transporte");
+    });
   });
 
   describe("auth protection", () => {

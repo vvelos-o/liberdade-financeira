@@ -56,7 +56,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   imprevistos: "#fbbf24",
 };
 
-export const VARIABLE_CATEGORIES = ["lazer", "alimentacao", "saude", "transporte", "pessoal", "imprevistos"] as const;
+export const VARIABLE_CATEGORIES = ["lazer", "alimentacao", "saude", "transporte", "pessoal", "imprevistos", "outros"] as const;
 
 export const CATEGORY_LABELS: Record<string, string> = {
   lazer: "Lazer",

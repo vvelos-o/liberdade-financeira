@@ -194,11 +194,24 @@ export default function Transacoes() {
 
   const handleCategoryChange = (id: number, category: string) => {
     const tx = filteredTransactions.find((t: any) => t.id === id);
-    correctMutation.mutate({ transactionId: id, category: category as any, description: tx?.description ?? "" }, {
+    if (!tx) return;
+    // Optimistic update: immediately update the cache
+    const queryKey = { year, month };
+    utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
+      if (!old) return old;
+      return old.map((t: any) => t.id === id ? { ...t, category, isReviewed: true } : t);
+    });
+    correctMutation.mutate({ transactionId: id, category: category as any, description: tx.description ?? "" }, {
       onSuccess: () => {
-        utils.pluggy.getTransactions.invalidate();
+        toast.success("Categoria atualizada.");
         utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
+      },
+      onError: (err) => {
+        console.error("correctCategory error:", err);
+        toast.error("Erro ao redefinir categoria. Tente novamente.");
+        // Rollback optimistic update
+        utils.pluggy.getTransactions.invalidate();
       },
     });
   };
