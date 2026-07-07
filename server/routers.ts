@@ -313,6 +313,11 @@ const dashboardRouter = router({
       throw error;
     }
   }),
+  getCategoryTransactions: protectedProcedure
+    .input(yearMonthSchema.extend({ category: z.string() }))
+    .query(({ ctx, input }) =>
+      db.getCategoryTransactions(ctx.user.id, input.year, input.month, input.category)
+    ),
   // Diagnostic endpoint to test individual queries
   debugFunnel: protectedProcedure.input(yearMonthSchema).query(async ({ ctx, input }) => {
     const results: Record<string, any> = {};

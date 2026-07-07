@@ -29,7 +29,7 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
 
   if (!data) return null;
 
-  const { totalIncome, manualIncome, pluggyExtraIncome, totalFixed, investmentTarget, realInvestment, effectiveInvestment, totalCompromissos, disponivel } = data;
+  const { totalIncome, manualFixedIncome, totalExtraIncome, totalFixed, investmentTarget, realInvestment, effectiveInvestment, totalCompromissos, disponivel } = data;
 
   return (
     <Card className="bg-card border-border overflow-hidden">
@@ -51,9 +51,9 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
         {expanded && (
           <div className="mt-3 pt-3 border-t border-border space-y-2 animate-count-up">
             <FunnelRow label="Renda" value={totalIncome} type="income" />
-            {pluggyExtraIncome > 0 && (
+            {totalExtraIncome > 0 && (
               <p className="text-[10px] text-muted-foreground ml-1">
-                (Fixa: {formatMoney(manualIncome)} + Extras: {formatMoney(pluggyExtraIncome)})
+                (Fixa: {formatMoney(manualFixedIncome)} + Extras: {formatMoney(totalExtraIncome)})
               </p>
             )}
             <FunnelRow label="Gastos fixos" value={-totalFixed} type="expense" />
@@ -208,11 +208,19 @@ function CategoryProgressBars({ categories, isLoading }: { categories: any[]; is
 function CategoryBar({ category, budget, spent, index }: {
   category: string; budget: number; spent: number; index: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const { year, month } = useMonth();
   const percentage = budget > 0 ? (spent / budget) * 100 : 0;
   const clampedPercentage = Math.min(percentage, 100);
   const isOverBudget = spent > budget;
   const isWarning = percentage >= 70 && !isOverBudget;
   const remaining = budget - spent;
+
+  // Only fetch when expanded
+  const { data: transactions, isLoading: txLoading } = trpc.dashboard.getCategoryTransactions.useQuery(
+    { year, month, category },
+    { enabled: expanded }
+  );
 
   // Use inline style for dynamic color since Tailwind can't handle dynamic values
   const barStyle = {
@@ -225,46 +233,56 @@ function CategoryBar({ category, budget, spent, index }: {
       className="stagger-item"
       style={{ animationDelay: `${index * 50}ms` }}
     >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">
-            {CATEGORY_LABELS[category] ?? category}
-          </span>
-          {isOverBudget && (
-            <AlertTriangle className="h-3 w-3 text-destructive" />
-          )}
-          {isWarning && (
-            <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
-              {Math.round(percentage)}%
+      <button
+        type="button"
+        className="w-full text-left focus:outline-none"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {CATEGORY_LABELS[category] ?? category}
             </span>
-          )}
+            {isOverBudget && (
+              <AlertTriangle className="h-3 w-3 text-destructive" />
+            )}
+            {isWarning && (
+              <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+                {Math.round(percentage)}%
+              </span>
+            )}
+            <ChevronDown className={cn(
+              "h-3 w-3 text-muted-foreground transition-transform duration-200",
+              expanded && "rotate-180"
+            )} />
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className={cn("font-money text-xs", isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground")}>
+              {formatMoney(spent)}
+            </span>
+            <span className="text-[10px] text-muted-foreground">/</span>
+            <span className="font-money text-[10px] text-muted-foreground">
+              {formatMoney(budget)}
+            </span>
+            <span className={cn(
+              "font-money text-[10px] font-medium ml-0.5",
+              isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground/70"
+            )}>
+              ({Math.round(percentage)}%)
+            </span>
+          </div>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className={cn("font-money text-xs", isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground")}>
-            {formatMoney(spent)}
-          </span>
-          <span className="text-[10px] text-muted-foreground">/</span>
-          <span className="font-money text-[10px] text-muted-foreground">
-            {formatMoney(budget)}
-          </span>
-          <span className={cn(
-            "font-money text-[10px] font-medium ml-0.5",
-            isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground/70"
-          )}>
-            ({Math.round(percentage)}%)
-          </span>
+        <div className="h-2 rounded-full bg-secondary overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-500",
+              isOverBudget && "bg-destructive",
+              isWarning && "bg-amber-400",
+            )}
+            style={barStyle}
+          />
         </div>
-      </div>
-      <div className="h-2 rounded-full bg-secondary overflow-hidden">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            isOverBudget && "bg-destructive",
-            isWarning && "bg-amber-400",
-          )}
-          style={barStyle}
-        />
-      </div>
+      </button>
       {isOverBudget && (
         <p className="text-[10px] text-destructive mt-0.5 font-medium">
           Excedeu {formatMoney(Math.abs(remaining))} ({Math.round(percentage)}%)
@@ -274,6 +292,48 @@ function CategoryBar({ category, budget, spent, index }: {
         <p className="text-[10px] text-amber-400 mt-0.5">
           Atenção: {Math.round(percentage)}% do orçamento utilizado
         </p>
+      )}
+      {/* Accordion detail */}
+      {expanded && (
+        <div className="mt-2 ml-1 pl-2 border-l-2 border-border space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+          {txLoading ? (
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          ) : transactions && transactions.length > 0 ? (
+            transactions.map((tx, i) => (
+              <div key={i} className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                    tx.source === "pluggy" ? "bg-emerald-400" :
+                    tx.source === "pluggy_credit" ? "bg-blue-400" :
+                    tx.source === "planned" ? "bg-amber-400" :
+                    tx.source === "installment" ? "bg-purple-400" :
+                    "bg-muted-foreground"
+                  )} />
+                  <span className="text-[11px] text-muted-foreground truncate">
+                    {tx.description}
+                  </span>
+                  {tx.date && (
+                    <span className="text-[9px] text-muted-foreground/60 flex-shrink-0">
+                      {tx.date.slice(8, 10)}/{tx.date.slice(5, 7)}
+                    </span>
+                  )}
+                </div>
+                <span className={cn(
+                  "font-money text-[11px] flex-shrink-0 ml-2",
+                  tx.amount < 0 ? "text-blue-400" : "text-muted-foreground"
+                )}>
+                  {tx.amount < 0 ? "+" : "-"}{formatMoney(Math.abs(tx.amount))}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="text-[10px] text-muted-foreground/60 italic">Nenhuma transação encontrada</p>
+          )}
+        </div>
       )}
     </div>
   );

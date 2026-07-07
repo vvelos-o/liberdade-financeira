@@ -846,33 +846,35 @@ export async function getMonthlyInsight(userId: number, year: number, month: num
 }
 
 export async function generateMonthlyInsight(userId: number, year: number, month: number) {
-  // Get previous month data for comparison
+  // Get current month funnel data
+  const currentFunnel = await getDashboardFunnel(userId, year, month);
+  if (!currentFunnel) return null;
+
+  // Get previous month for comparison (may be null if before cutoff)
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
-
-  const currentSummary = await getDashboardSummary(userId, year, month);
-  const prevSummary = await getDashboardSummary(userId, prevYear, prevMonth);
-
-  if (!currentSummary && !prevSummary) {
-    return null;
-  }
+  const prevFunnel = await getDashboardFunnel(userId, prevYear, prevMonth);
 
   // Build insight based on data comparison
   const { invokeLLM } = await import("./_core/llm");
 
+  const categoriesStr = currentFunnel.categories
+    .filter(c => c.spent > 0)
+    .map(c => `${c.category}: R$ ${c.spent.toFixed(2)} / R$ ${c.budget.toFixed(2)} (${c.budget > 0 ? Math.round((c.spent / c.budget) * 100) : 0}%)`)
+    .join(", ");
+
+  const prevSection = prevFunnel ? `\nMês anterior (${prevYear}/${prevMonth}):\n- Renda: R$ ${prevFunnel.totalIncome.toFixed(2)}\n- Gastos fixos: R$ ${prevFunnel.totalFixed.toFixed(2)}\n- Disponível: R$ ${prevFunnel.disponivel.toFixed(2)}\n- Categorias: ${prevFunnel.categories.filter(c => c.spent > 0).map(c => `${c.category}: R$ ${c.spent.toFixed(2)}`).join(", ")}` : "(Sem dados do mês anterior para comparação)";
+
   const prompt = `Você é um consultor financeiro pessoal. Gere UM insight curto e acionável (máximo 2 frases) para o usuário baseado nos dados abaixo.
 
-Mês anterior (${prevYear}/${prevMonth}):
-- Renda: R$ ${prevSummary?.totalIncome?.toFixed(2) ?? "0"}
-- Gastos fixos: R$ ${prevSummary?.totalFixed?.toFixed(2) ?? "0"}
-- Gastos variáveis: R$ ${prevSummary?.totalQol?.toFixed(2) ?? "0"}
-- Categorias: ${JSON.stringify(prevSummary?.qolByCategory ?? [])}
-
 Mês atual (${year}/${month}):
-- Renda: R$ ${currentSummary?.totalIncome?.toFixed(2) ?? "0"}
-- Gastos fixos: R$ ${currentSummary?.totalFixed?.toFixed(2) ?? "0"}
-- Gastos variáveis: R$ ${currentSummary?.totalQol?.toFixed(2) ?? "0"}
-- Categorias: ${JSON.stringify(currentSummary?.qolByCategory ?? [])}
+- Renda total: R$ ${currentFunnel.totalIncome.toFixed(2)} (Fixa: R$ ${currentFunnel.manualFixedIncome.toFixed(2)} + Extras: R$ ${currentFunnel.totalExtraIncome.toFixed(2)})
+- Gastos fixos: R$ ${currentFunnel.totalFixed.toFixed(2)}
+- Investimento: R$ ${currentFunnel.effectiveInvestment.toFixed(2)} (Meta: R$ ${currentFunnel.investmentTarget.toFixed(2)})
+- Compromissos: R$ ${currentFunnel.totalCompromissos.toFixed(2)}
+- Disponível para variável: R$ ${currentFunnel.disponivel.toFixed(2)}
+- Gastos por categoria: ${categoriesStr}
+${prevSection}
 
 Regras:
 - Seja específico com valores em R$
@@ -925,12 +927,33 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   if (!db) return null;
   try {
 
-  // 1. Total income (prefer Pluggy when available, fallback to manual)
-  const incomeResult = await db
+  // 1. Total income - separate fixed from extra manual entries
+  // Fixed income (salary, etc.)
+  const fixedIncomeResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
     .from(incomeEntries)
-    .where(and(eq(incomeEntries.userId, userId), eq(incomeEntries.year, year), eq(incomeEntries.month, month)));
-  const manualIncome = parseFloat(incomeResult[0]?.total ?? "0");
+    .innerJoin(incomeSources, eq(incomeEntries.sourceId, incomeSources.id))
+    .where(and(
+      eq(incomeEntries.userId, userId),
+      eq(incomeEntries.year, year),
+      eq(incomeEntries.month, month),
+      eq(incomeSources.type, "fixed")
+    ));
+  const manualFixedIncome = parseFloat(fixedIncomeResult[0]?.total ?? "0");
+
+  // Extra/variable income from manual entries (e.g., restituição)
+  const extraIncomeResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
+    .from(incomeEntries)
+    .innerJoin(incomeSources, eq(incomeEntries.sourceId, incomeSources.id))
+    .where(and(
+      eq(incomeEntries.userId, userId),
+      eq(incomeEntries.year, year),
+      eq(incomeEntries.month, month),
+      inArray(incomeSources.type, ["extra", "variable"])
+    ));
+  const manualExtraIncome = parseFloat(extraIncomeResult[0]?.total ?? "0");
+  const manualIncome = manualFixedIncome + manualExtraIncome;
 
   // Pluggy "receita" extras: credit transactions categorized as 'receita' (NOT 'receita_contabilizada')
   // These are extra income that the user wants to ADD to their disponível (e.g., friends splitting a bill)
@@ -950,9 +973,10 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       )
     );
   const pluggyExtraIncome = parseFloat(pluggyExtraIncomeResult[0]?.total ?? "0");
-  // Total income = manual (source of truth) + Pluggy extras (category='receita')
-  // Transactions marked 'receita_contabilizada' are ignored (already in manual income)
+  // Total income = all manual entries + Pluggy extras (category='receita')
   const totalIncome = manualIncome + pluggyExtraIncome;
+  // Total extra = manual extra + pluggy extra (for display breakdown)
+  const totalExtraIncome = manualExtraIncome + pluggyExtraIncome;
 
   // 2. Fixed expenses (ONLY manual entries from ACTIVE categories)
   // Join with categories to exclude entries from deactivated categories
@@ -1078,12 +1102,48 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     )
     .groupBy(pluggyTransactions.category);
 
-  // Merge spending from both sources, then subtract credits
+  // 7b. Planned expenses by category (to count toward category budgets)
+  const plannedByCategory = await db
+    .select({
+      category: plannedExpenses.category,
+      total: sql<string>`COALESCE(SUM(${plannedExpenses.amount}), 0)`,
+    })
+    .from(plannedExpenses)
+    .where(and(eq(plannedExpenses.userId, userId), eq(plannedExpenses.year, year), eq(plannedExpenses.month, month)))
+    .groupBy(plannedExpenses.category);
+
+  // 7c. Installment expenses by category (to count toward category budgets)
+  const installmentByCategory = await db
+    .select({
+      category: installmentExpenses.category,
+      total: sql<string>`COALESCE(SUM(${installmentExpenseMonths.amount}), 0)`,
+    })
+    .from(installmentExpenseMonths)
+    .innerJoin(installmentExpenses, eq(installmentExpenseMonths.installmentExpenseId, installmentExpenses.id))
+    .where(and(
+      eq(installmentExpenseMonths.userId, userId),
+      eq(installmentExpenseMonths.year, year),
+      eq(installmentExpenseMonths.month, month),
+      eq(installmentExpenses.isActive, true)
+    ))
+    .groupBy(installmentExpenses.category);
+
+  // Merge spending from all sources, then subtract credits
   const spendingMap = new Map<string, number>();
   for (const row of qolByCategory) {
     spendingMap.set(row.category, (spendingMap.get(row.category) ?? 0) + parseFloat(row.total));
   }
   for (const row of pluggyByCategory) {
+    const cat = row.category as string;
+    spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
+  }
+  // Add planned expenses to their respective categories
+  for (const row of plannedByCategory) {
+    const cat = row.category as string;
+    spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
+  }
+  // Add installment expenses to their respective categories
+  for (const row of installmentByCategory) {
     const cat = row.category as string;
     spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
   }
@@ -1106,6 +1166,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   return {
     totalIncome,
     manualIncome,
+    manualFixedIncome,
+    totalExtraIncome,
     pluggyExtraIncome,
     totalFixed,
     investmentTarget,
@@ -1125,6 +1187,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     return {
       totalIncome: 0,
       manualIncome: 0,
+      manualFixedIncome: 0,
+      totalExtraIncome: 0,
       pluggyExtraIncome: 0,
       totalFixed: 0,
       investmentTarget: 0,
@@ -1207,4 +1271,146 @@ export async function getInvestmentHistory(userId: number, year: number) {
     const target = targetMap.get(month) ?? 0;
     return { month, realInvestment, target };
   });
+}
+
+
+// ─── Category Transaction Details ─────────────────────────────────────────────
+
+export async function getCategoryTransactions(userId: number, year: number, month: number, category: string) {
+  const cat = category as any; // Cast to satisfy Drizzle enum column type
+  if (year < DATA_CUTOFF_YEAR || (year === DATA_CUTOFF_YEAR && month < DATA_CUTOFF_MONTH)) return [];
+  const db = await getDb();
+  if (!db) return [];
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+
+  type TransactionDetail = { description: string; amount: number; source: string; date: string };
+  const results: TransactionDetail[] = [];
+
+  // 1. Pluggy transactions (debit, not linked, matching category)
+  const pluggyRows = await db
+    .select({
+      description: pluggyTransactions.description,
+      amount: pluggyTransactions.amount,
+      date: pluggyTransactions.transactionDate,
+    })
+    .from(pluggyTransactions)
+    .where(and(
+      eq(pluggyTransactions.userId, userId),
+      eq(pluggyTransactions.type, "debit"),
+      eq(pluggyTransactions.category, cat),
+      isNull(pluggyTransactions.linkedExpenseType),
+      gte(pluggyTransactions.transactionDate, startDate),
+      lte(pluggyTransactions.transactionDate, endDate)
+    ))
+    .orderBy(pluggyTransactions.transactionDate);
+
+  for (const row of pluggyRows) {
+    results.push({
+      description: row.description ?? "Transação Pluggy",
+      amount: parseFloat(String(row.amount)),
+      source: "pluggy",
+      date: row.date ? new Date(row.date).toISOString().slice(0, 10) : "",
+    });
+  }
+
+  // 2. Pluggy credits (refunds) that reduce this category
+  const pluggyCreditRows = await db
+    .select({
+      description: pluggyTransactions.description,
+      amount: pluggyTransactions.amount,
+      date: pluggyTransactions.transactionDate,
+    })
+    .from(pluggyTransactions)
+    .where(and(
+      eq(pluggyTransactions.userId, userId),
+      eq(pluggyTransactions.type, "credit"),
+      eq(pluggyTransactions.category, cat),
+      gte(pluggyTransactions.transactionDate, startDate),
+      lte(pluggyTransactions.transactionDate, endDate)
+    ))
+    .orderBy(pluggyTransactions.transactionDate);
+
+  for (const row of pluggyCreditRows) {
+    results.push({
+      description: `(Crédito) ${row.description ?? "Reembolso"}`,
+      amount: -parseFloat(String(row.amount)),
+      source: "pluggy_credit",
+      date: row.date ? new Date(row.date).toISOString().slice(0, 10) : "",
+    });
+  }
+
+  // 3. Manual QoL expenses
+  const qolRows = await db
+    .select({
+      description: qolExpenses.description,
+      amount: qolExpenses.amount,
+    })
+    .from(qolExpenses)
+    .where(and(
+      eq(qolExpenses.userId, userId),
+      eq(qolExpenses.year, year),
+      eq(qolExpenses.month, month),
+      eq(qolExpenses.category, cat)
+    ));
+
+  for (const row of qolRows) {
+    results.push({
+      description: row.description ?? "Gasto manual",
+      amount: parseFloat(String(row.amount)),
+      source: "manual",
+      date: "",
+    });
+  }
+
+  // 4. Planned expenses with this category
+  const plannedRows = await db
+    .select({
+      description: plannedExpenses.description,
+      amount: plannedExpenses.amount,
+    })
+    .from(plannedExpenses)
+    .where(and(
+      eq(plannedExpenses.userId, userId),
+      eq(plannedExpenses.year, year),
+      eq(plannedExpenses.month, month),
+      eq(plannedExpenses.category, cat)
+    ));
+
+  for (const row of plannedRows) {
+    results.push({
+      description: `(Programado) ${row.description ?? "Gasto programado"}`,
+      amount: parseFloat(String(row.amount)),
+      source: "planned",
+      date: "",
+    });
+  }
+
+  // 5. Installment expenses with this category
+  const installmentRows = await db
+    .select({
+      description: installmentExpenses.description,
+      amount: installmentExpenseMonths.amount,
+    })
+    .from(installmentExpenseMonths)
+    .innerJoin(installmentExpenses, eq(installmentExpenseMonths.installmentExpenseId, installmentExpenses.id))
+    .where(and(
+      eq(installmentExpenseMonths.userId, userId),
+      eq(installmentExpenseMonths.year, year),
+      eq(installmentExpenseMonths.month, month),
+      eq(installmentExpenses.category, cat),
+      eq(installmentExpenses.isActive, true)
+    ));
+
+  for (const row of installmentRows) {
+    results.push({
+      description: `(Parcela) ${row.description ?? "Parcela"}`,
+      amount: parseFloat(String(row.amount)),
+      source: "installment",
+      date: "",
+    });
+  }
+
+  return results;
 }
