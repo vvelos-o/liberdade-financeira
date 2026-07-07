@@ -510,7 +510,7 @@ export async function upsertPluggyTransaction(
     accountId?: string;
     description: string;
     amount: string;
-    type: "debit" | "credit";
+    type: "debit" | "credit" | "transfer";
     transactionDate: Date;
     category?: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado";
   }
@@ -744,6 +744,7 @@ export async function getAnnualQolHistory(userId: number, year: number) {
         FROM pluggy_transactions
         WHERE userId = ${userId} AND type = 'debit'
           AND transactionDate >= ${startDate} AND transactionDate <= ${endDate}
+          AND category NOT IN ('receita', 'fixo', 'investimento', 'nao_categorizado')
         GROUP BY MONTH(transactionDate), category`
   ) as any;
 

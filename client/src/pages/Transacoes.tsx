@@ -63,10 +63,13 @@ function TransactionItem({ tx, onCategoryChange }: {
       <div className="text-right flex-shrink-0">
         <span className={cn(
           "font-money text-sm font-semibold",
-          tx.type === "credit" ? "text-positive" : "text-foreground"
+          tx.type === "credit" ? "text-positive" : tx.type === "transfer" ? "text-muted-foreground" : "text-foreground"
         )}>
-          {tx.type === "credit" ? "+" : "-"}{formatMoney(parseFloat(tx.amount))}
+          {tx.type === "credit" ? "+" : tx.type === "transfer" ? "" : "-"}{formatMoney(parseFloat(tx.amount))}
         </span>
+        {tx.type === "transfer" && (
+          <span className="text-xs text-muted-foreground block">transferência</span>
+        )}
       </div>
     </div>
   );

@@ -42,9 +42,16 @@ async function getPluggyAccounts(apiKey: string, itemId: string) {
 interface PluggyTransaction {
   id: string;
   description?: string;
+  descriptionRaw?: string;
   amount?: number;
   date?: string;
-  type?: string;
+  type?: string; // "DEBIT" or "CREDIT" from Pluggy API
+  status?: string; // "PENDING" or "POSTED"
+  creditCardMetadata?: {
+    installmentNumber?: number;
+    totalInstallments?: number;
+    totalAmount?: number;
+  };
 }
 
 async function getPluggyTransactions(apiKey: string, accountId: string, from?: string, to?: string) {
@@ -82,8 +89,26 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   saude: ["farmácia", "drogaria", "médico", "hospital", "clínica", "dentista", "plano de saúde", "exame", "laboratorio", "remédio"],
   fixo: ["aluguel", "condomínio", "energia", "água", "internet", "telefone", "celular", "seguro"],
   investimento: ["investimento", "tesouro", "fundo", "ação", "cdb", "lci", "lca", "poupança", "xp", "btg", "rico", "clear"],
-  receita: ["salário", "salario", "pagamento", "pix recebido", "transferência recebida"],
+  receita: ["salário", "salario", "pix recebido", "transferência recebida", "pagamento recebido"],
 };
+
+// Patterns that indicate a transfer (not a real income or expense)
+const TRANSFER_PATTERNS = [
+  "pagamento de fatura",
+  "pgto fatura",
+  "pag fatura",
+  "pagamento fatura",
+  "transferencia entre contas",
+  "transferência entre contas",
+  "aplicacao",
+  "aplicação",
+  "resgate",
+];
+
+function isTransferTransaction(description: string): boolean {
+  const lower = description.toLowerCase();
+  return TRANSFER_PATTERNS.some(pattern => lower.includes(pattern));
+}
 
 function autoCategorize(description: string): "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado" {
   const lower = description.toLowerCase();
@@ -162,16 +187,37 @@ export const pluggyRouter = router({
             const transactions = await getPluggyTransactions(apiKey, account.id, input.fromDate, input.toDate);
             for (const tx of transactions) {
               const desc = tx.description ?? "";
+              const amount = Math.abs(tx.amount ?? 0);
+
+              // Determine transaction type using Pluggy's type field (DEBIT/CREDIT)
+              // tx.type from Pluggy API: "DEBIT" = outflow, "CREDIT" = inflow
+              let txType: "debit" | "credit" | "transfer";
+              if (isTransferTransaction(desc)) {
+                txType = "transfer";
+              } else if (tx.type?.toUpperCase() === "DEBIT") {
+                txType = "debit";
+              } else if (tx.type?.toUpperCase() === "CREDIT") {
+                txType = "credit";
+              } else {
+                // Fallback: infer from amount sign (for bank accounts: negative = outflow)
+                txType = (tx.amount ?? 0) < 0 ? "debit" : "credit";
+              }
+
               // 1. Check learned rules first (higher priority, user-corrected)
               const matchedRule = learnedRules.find(r => desc.toUpperCase().includes(r.pattern.toUpperCase()));
               let category: string;
               if (matchedRule) {
                 category = matchedRule.category;
+              } else if (txType === "transfer") {
+                category = "nao_categorizado"; // transfers don't need a spending category
+              } else if (txType === "credit") {
+                // Credits are income — auto-categorize as receita unless rules say otherwise
+                const autoCat = autoCategorize(desc);
+                category = autoCat === "nao_categorizado" ? "receita" : autoCat;
               } else {
-                // 2. Fall back to keyword-based auto-categorization
+                // 2. Fall back to keyword-based auto-categorization for debits
                 category = autoCategorize(desc);
               }
-              const amount = Math.abs(tx.amount ?? 0);
 
               await db.upsertPluggyTransaction(ctx.user.id, {
                 pluggyTransactionId: tx.id,
@@ -179,14 +225,14 @@ export const pluggyRouter = router({
                 accountId: account.id,
                 description: desc,
                 amount: String(amount),
-                type: (tx.amount ?? 0) < 0 ? "debit" : "credit",
+                type: txType,
                 transactionDate: new Date(tx.date ?? Date.now()),
                 category: category as any,
               });
 
               // Auto-detect installments (X/Y pattern like "KABUM 3/8" or "PARCELA 2 DE 6")
               const installmentMatch = desc.match(/(\d{1,2})\s*[\/]\s*(\d{1,3})/) || desc.match(/(\d{1,2})\s+DE\s+(\d{1,3})/i);
-              if (installmentMatch && (tx.amount ?? 0) < 0) {
+              if (installmentMatch && txType === "debit") {
                 const currentInstallment = parseInt(installmentMatch[1]);
                 const totalInstallments = parseInt(installmentMatch[2]);
                 if (totalInstallments >= 2 && totalInstallments <= 120 && currentInstallment <= totalInstallments) {
