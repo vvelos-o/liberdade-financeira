@@ -525,6 +525,7 @@ export async function upsertPluggyTransaction(
       set: {
         description: data.description,
         amount: data.amount,
+        type: data.type,
         // Only update category if the existing row has NOT been reviewed by the user
         category: sql`IF(${pluggyTransactions.isReviewed} = 0, ${categoryValue}, ${pluggyTransactions.category})`,
       },
