@@ -100,10 +100,20 @@ async function startServer() {
       
       // Clean up auto-created installment duplicates from Pluggy sync
       // These were created without dedup checks and cause inflated compromissos values
+      // Safe: auto-installment creation has been removed, so any existing ones are from old syncs
       try {
-        await db.execute(sql.raw("DELETE FROM `installment_expense_months`"));
-        await db.execute(sql.raw("DELETE FROM `installment_expenses`"));
-        results.push(`✅ Cleaned up all auto-created installments (use manual entry instead)`);
+        // Only clean up if there are duplicates (same description appears multiple times)
+        const [dupeCheck] = await db.execute(sql.raw(
+          "SELECT description, COUNT(*) as cnt FROM `installment_expenses` GROUP BY description HAVING cnt > 1 LIMIT 1"
+        ));
+        const hasDupes = Array.isArray(dupeCheck) && dupeCheck.length > 0;
+        if (hasDupes) {
+          await db.execute(sql.raw("DELETE FROM `installment_expense_months`"));
+          await db.execute(sql.raw("DELETE FROM `installment_expenses`"));
+          results.push(`✅ Cleaned up duplicate installments (re-add manually if needed)`);
+        } else {
+          results.push(`⏭️ No duplicate installments found, skipping cleanup`);
+        }
       } catch (e: any) {
         results.push(`❌ Installment cleanup failed: ${e.message}`);
       }
