@@ -14,16 +14,24 @@ import { toast } from "sonner";
 
 // ─── Transaction Item ────────────────────────────────────────────────────────
 
-function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }: {
+function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned, onLinkToInstallment, fixedExpenses, plannedExpenses, installmentMonths, allInstallments }: {
   tx: any;
   onCategoryChange: (id: number, category: string) => void;
   onLinkToFixed: (id: number, fixedExpenseId: number) => void;
+  onLinkToPlanned: (id: number, plannedExpenseId: number) => void;
+  onLinkToInstallment: (id: number, installmentMonthId: number) => void;
   fixedExpenses: any[] | undefined;
+  plannedExpenses: any[] | undefined;
+  installmentMonths: any[] | undefined;
+  allInstallments: any[] | undefined;
 }) {
   const [editing, setEditing] = useState(false);
   const date = new Date(tx.transactionDate);
   const isUncategorized = tx.category === "nao_categorizado";
   const isLinkedToFixed = tx.linkedExpenseType === "fixed" && tx.linkedExpenseId;
+  const isLinkedToPlanned = tx.linkedExpenseType === "planned" && tx.linkedExpenseId;
+  const isLinkedToInstallment = tx.linkedExpenseType === "installment" && tx.linkedExpenseId;
+  const isLinked = isLinkedToFixed || isLinkedToPlanned || isLinkedToInstallment;
 
   return (
     <div className={cn(
@@ -38,11 +46,17 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }:
           </span>
           {editing ? (
             <Select
-              value={isLinkedToFixed ? `linked_${tx.linkedExpenseId}` : tx.category}
+              value={isLinkedToFixed ? `fixed_${tx.linkedExpenseId}` : isLinkedToPlanned ? `planned_${tx.linkedExpenseId}` : isLinkedToInstallment ? `installment_${tx.linkedExpenseId}` : tx.category}
               onValueChange={(val) => {
-                if (val.startsWith("linked_")) {
-                  const fixedId = parseInt(val.replace("linked_", ""), 10);
+                if (val.startsWith("fixed_")) {
+                  const fixedId = parseInt(val.replace("fixed_", ""), 10);
                   onLinkToFixed(tx.id, fixedId);
+                } else if (val.startsWith("planned_")) {
+                  const plannedId = parseInt(val.replace("planned_", ""), 10);
+                  onLinkToPlanned(tx.id, plannedId);
+                } else if (val.startsWith("installment_")) {
+                  const instId = parseInt(val.replace("installment_", ""), 10);
+                  onLinkToInstallment(tx.id, instId);
                 } else if (val === "__unlink__") {
                   // Unlink: set back to nao_categorizado
                   onCategoryChange(tx.id, "nao_categorizado");
@@ -77,7 +91,7 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }:
                         Vincular a Gasto Fixo
                       </SelectLabel>
                       {fixedExpenses.map((fe: any) => (
-                        <SelectItem key={`linked_${fe.id}`} value={`linked_${fe.id}`}>
+                        <SelectItem key={`fixed_${fe.id}`} value={`fixed_${fe.id}`}>
                           {fe.name}
                         </SelectItem>
                       ))}
@@ -85,8 +99,47 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }:
                   </>
                 )}
 
+                {/* Planned expense linking section */}
+                {tx.type === "debit" && plannedExpenses && plannedExpenses.length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Vincular a Gasto Programado
+                      </SelectLabel>
+                      {plannedExpenses.map((pe: any) => (
+                        <SelectItem key={`planned_${pe.id}`} value={`planned_${pe.id}`}>
+                          {pe.description} ({formatMoney(parseFloat(pe.amount))})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </>
+                )}
+
+                {/* Installment linking section */}
+                {tx.type === "debit" && installmentMonths && installmentMonths.length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] flex items-center gap-1">
+                        <Package className="h-3 w-3" />
+                        Vincular a Parcela
+                      </SelectLabel>
+                      {installmentMonths.map((im: any) => {
+                        const parent = allInstallments?.find((a: any) => a.id === im.installmentExpenseId);
+                        return (
+                          <SelectItem key={`installment_${im.id}`} value={`installment_${im.id}`}>
+                            {parent?.description ?? "Parcela"} ({im.installmentNumber}/{parent?.totalInstallments ?? "?"})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectGroup>
+                  </>
+                )}
+
                 {/* Unlink option if currently linked */}
-                {isLinkedToFixed && (
+                {isLinked && (
                   <>
                     <SelectSeparator />
                     <SelectItem value="__unlink__" className="text-destructive">
@@ -103,7 +156,7 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }:
             <button onClick={() => setEditing(true)} className="transition-opacity hover:opacity-80">
               <div className="flex items-center gap-1">
                 <CategoryBadge category={tx.category as FinanceCategory} size="sm" />
-                {isLinkedToFixed && (
+                {isLinked && (
                   <span className="text-[9px] text-primary flex items-center gap-0.5">
                     <Link2 className="h-2.5 w-2.5" />
                     vinculado
@@ -207,6 +260,9 @@ export default function Transacoes() {
   const { data: transactions, isLoading } = trpc.pluggy.getTransactions.useQuery({ year, month });
   const { data: uncategorized } = trpc.pluggy.getUncategorized.useQuery({ limit: 50 });
   const { data: fixedExpenses } = trpc.fixedExpenses.getCategories.useQuery();
+  const { data: plannedExpenses } = trpc.planned.getExpenses.useQuery({ year, month });
+  const { data: installmentMonths } = trpc.installments.getMonthsForPeriod.useQuery({ year, month });
+  const { data: allInstallments } = trpc.installments.getAll.useQuery();
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
   const aiSuggestMutation = trpc.pluggy.aiSuggestCategories.useMutation();
   const applyMutation = trpc.pluggy.applyCategories.useMutation();
@@ -219,7 +275,7 @@ export default function Transacoes() {
   const filteredTransactions = transactions?.filter((tx: any) => {
     if (categoryFilter === "all") return true;
     if (categoryFilter === "uncategorized") return tx.category === "nao_categorizado";
-    if (categoryFilter === "linked") return tx.linkedExpenseType === "fixed";
+    if (categoryFilter === "linked") return !!tx.linkedExpenseType;
     return tx.category === categoryFilter;
   }) ?? [];
 
@@ -302,6 +358,59 @@ export default function Transacoes() {
       },
       onError: (err) => {
         console.error("linkToFixed error:", err);
+        toast.error("Erro ao vincular. Tente novamente.");
+        utils.pluggy.getTransactions.invalidate();
+      },
+    });
+  };
+
+  const handleLinkToPlanned = (id: number, plannedExpenseId: number) => {
+    const queryKey = { year, month };
+    utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
+      if (!old) return old;
+      return old.map((t: any) => t.id === id ? { ...t, category: "fixo", linkedExpenseId: plannedExpenseId, linkedExpenseType: "planned", isReviewed: true } : t);
+    });
+    updateCategoryMutation.mutate({
+      id,
+      category: "fixo",
+      linkedExpenseId: plannedExpenseId,
+      linkedExpenseType: "planned",
+    }, {
+      onSuccess: () => {
+        const pe = plannedExpenses?.find((p: any) => p.id === plannedExpenseId);
+        toast.success(`Vinculado a "${pe?.description ?? "gasto programado"}".`);
+        utils.pluggy.getUncategorized.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+      },
+      onError: (err) => {
+        console.error("linkToPlanned error:", err);
+        toast.error("Erro ao vincular. Tente novamente.");
+        utils.pluggy.getTransactions.invalidate();
+      },
+    });
+  };
+
+  const handleLinkToInstallment = (id: number, installmentMonthId: number) => {
+    const queryKey = { year, month };
+    utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
+      if (!old) return old;
+      return old.map((t: any) => t.id === id ? { ...t, category: "fixo", linkedExpenseId: installmentMonthId, linkedExpenseType: "installment", isReviewed: true } : t);
+    });
+    updateCategoryMutation.mutate({
+      id,
+      category: "fixo",
+      linkedExpenseId: installmentMonthId,
+      linkedExpenseType: "installment",
+    }, {
+      onSuccess: () => {
+        const im = installmentMonths?.find((i: any) => i.id === installmentMonthId);
+        const parent = allInstallments?.find((a: any) => a.id === im?.installmentExpenseId);
+        toast.success(`Vinculado a "${parent?.description ?? "parcela"}".`);
+        utils.pluggy.getUncategorized.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+      },
+      onError: (err) => {
+        console.error("linkToInstallment error:", err);
         toast.error("Erro ao vincular. Tente novamente.");
         utils.pluggy.getTransactions.invalidate();
       },
@@ -407,7 +516,12 @@ export default function Transacoes() {
                   tx={tx}
                   onCategoryChange={handleCategoryChange}
                   onLinkToFixed={handleLinkToFixed}
+                  onLinkToPlanned={handleLinkToPlanned}
+                  onLinkToInstallment={handleLinkToInstallment}
                   fixedExpenses={fixedExpenses}
+                  plannedExpenses={plannedExpenses}
+                  installmentMonths={installmentMonths}
+                  allInstallments={allInstallments}
                 />
               </div>
             ))}

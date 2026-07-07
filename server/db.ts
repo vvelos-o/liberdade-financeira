@@ -677,7 +677,13 @@ export async function getDashboardSummary(userId: number, year: number, month: n
   const installmentResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${installmentExpenseMonths.amount}), 0)` })
     .from(installmentExpenseMonths)
-    .where(and(eq(installmentExpenseMonths.userId, userId), eq(installmentExpenseMonths.year, year), eq(installmentExpenseMonths.month, month)));
+    .innerJoin(installmentExpenses, eq(installmentExpenseMonths.installmentExpenseId, installmentExpenses.id))
+    .where(and(
+      eq(installmentExpenseMonths.userId, userId),
+      eq(installmentExpenseMonths.year, year),
+      eq(installmentExpenseMonths.month, month),
+      eq(installmentExpenses.isActive, true)
+    ));
 
   const plannedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${plannedExpenses.amount}), 0)` })
@@ -976,11 +982,17 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     console.error("[getDashboardFunnel] getBudgetSettings failed (using defaults):", budgetErr);
   }
 
-  // 4. Installments for this month (compromissos)
+  // 4. Installments for this month (compromissos) - only from ACTIVE installment expenses
   const installmentResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${installmentExpenseMonths.amount}), 0)` })
     .from(installmentExpenseMonths)
-    .where(and(eq(installmentExpenseMonths.userId, userId), eq(installmentExpenseMonths.year, year), eq(installmentExpenseMonths.month, month)));
+    .innerJoin(installmentExpenses, eq(installmentExpenseMonths.installmentExpenseId, installmentExpenses.id))
+    .where(and(
+      eq(installmentExpenseMonths.userId, userId),
+      eq(installmentExpenseMonths.year, year),
+      eq(installmentExpenseMonths.month, month),
+      eq(installmentExpenses.isActive, true)
+    ));
   const totalInstallments = parseFloat(installmentResult[0]?.total ?? "0");
 
   // 5. Planned expenses for this month (compromissos)
