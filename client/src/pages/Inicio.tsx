@@ -208,20 +208,15 @@ function CategoryProgressBars({ categories, isLoading }: { categories: any[]; is
 function CategoryBar({ category, budget, spent, index }: {
   category: string; budget: number; spent: number; index: number;
 }) {
-  const percentage = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+  const percentage = budget > 0 ? (spent / budget) * 100 : 0;
+  const clampedPercentage = Math.min(percentage, 100);
   const isOverBudget = spent > budget;
-  const isWarning = percentage >= 80 && !isOverBudget;
+  const isWarning = percentage >= 70 && !isOverBudget;
   const remaining = budget - spent;
-
-  const barColor = isOverBudget
-    ? "bg-destructive"
-    : isWarning
-    ? "bg-amber-400"
-    : `bg-[${CATEGORY_COLORS[category] ?? "#9ca3af"}]`;
 
   // Use inline style for dynamic color since Tailwind can't handle dynamic values
   const barStyle = {
-    width: `${Math.min(percentage, 100)}%`,
+    width: `${clampedPercentage}%`,
     backgroundColor: isOverBudget ? undefined : isWarning ? undefined : (CATEGORY_COLORS[category] ?? "#9ca3af"),
   };
 
@@ -238,14 +233,25 @@ function CategoryBar({ category, budget, spent, index }: {
           {isOverBudget && (
             <AlertTriangle className="h-3 w-3 text-destructive" />
           )}
+          {isWarning && (
+            <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full">
+              {Math.round(percentage)}%
+            </span>
+          )}
         </div>
         <div className="flex items-baseline gap-1.5">
-          <span className={cn("font-money text-xs", isOverBudget ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("font-money text-xs", isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground")}>
             {formatMoney(spent)}
           </span>
           <span className="text-[10px] text-muted-foreground">/</span>
           <span className="font-money text-[10px] text-muted-foreground">
             {formatMoney(budget)}
+          </span>
+          <span className={cn(
+            "font-money text-[10px] font-medium ml-0.5",
+            isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground/70"
+          )}>
+            ({Math.round(percentage)}%)
           </span>
         </div>
       </div>
@@ -261,7 +267,12 @@ function CategoryBar({ category, budget, spent, index }: {
       </div>
       {isOverBudget && (
         <p className="text-[10px] text-destructive mt-0.5 font-medium">
-          Excedeu {formatMoney(Math.abs(remaining))}
+          Excedeu {formatMoney(Math.abs(remaining))} ({Math.round(percentage)}%)
+        </p>
+      )}
+      {isWarning && !isOverBudget && (
+        <p className="text-[10px] text-amber-400 mt-0.5">
+          Atenção: {Math.round(percentage)}% do orçamento utilizado
         </p>
       )}
     </div>
