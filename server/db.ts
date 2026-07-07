@@ -939,12 +939,18 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   const totalFixed = manualFixed + pluggyFixed;
 
   // 3. Budget settings (investment target + category percentages)
-  const budget = await getBudgetSettings(userId, year, month);
-  const investmentTarget = parseFloat(budget?.investmentTarget ?? "0");
-  const rawPercentages = budget?.categoryPercentages;
-  const categoryPercentages = (rawPercentages && Object.keys(rawPercentages).length > 0)
-    ? rawPercentages
-    : DEFAULT_CATEGORY_PERCENTAGES;
+  let investmentTarget = 0;
+  let categoryPercentages: Record<string, number> = DEFAULT_CATEGORY_PERCENTAGES;
+  try {
+    const budget = await getBudgetSettings(userId, year, month);
+    investmentTarget = parseFloat(budget?.investmentTarget ?? "0");
+    const rawPercentages = budget?.categoryPercentages;
+    if (rawPercentages && Object.keys(rawPercentages).length > 0) {
+      categoryPercentages = rawPercentages;
+    }
+  } catch (budgetErr) {
+    console.error("[getDashboardFunnel] getBudgetSettings failed (using defaults):", budgetErr);
+  }
 
   // 4. Installments for this month (compromissos)
   const installmentResult = await db

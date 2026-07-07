@@ -48,6 +48,61 @@ async function startServer() {
     }
   });
 
+  // Migration endpoint to apply missing schema changes on Railway
+  app.get("/api/migrate", async (req, res) => {
+    const pin = req.query.pin;
+    if (pin !== process.env.APP_PIN) return res.status(403).json({ error: "Invalid PIN" });
+    const results: string[] = [];
+    try {
+      const { getDb } = await import("../db");
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: "No DB connection" });
+      const { sql } = await import("drizzle-orm");
+      
+      // Check and add missing columns to budget_settings
+      const migrations = [
+        { check: "investmentTarget", sql: "ALTER TABLE `budget_settings` ADD COLUMN `investmentTarget` decimal(12,2) DEFAULT '0.00'" },
+        { check: "categoryPercentages", sql: "ALTER TABLE `budget_settings` ADD COLUMN `categoryPercentages` json" },
+        { check: "goalType on financial_goals", sql: "ALTER TABLE `financial_goals` ADD COLUMN `goalType` enum('commitment','optional') DEFAULT 'optional' NOT NULL" },
+      ];
+      
+      for (const m of migrations) {
+        try {
+          await db.execute(sql.raw(m.sql));
+          results.push(`✅ Applied: ${m.check}`);
+        } catch (e: any) {
+          if (e.message?.includes("Duplicate column")) {
+            results.push(`⏭️ Already exists: ${m.check}`);
+          } else {
+            results.push(`❌ Failed ${m.check}: ${e.message}`);
+          }
+        }
+      }
+      
+      // Update enums to include pessoal/imprevistos
+      const enumMigrations = [
+        { table: "category_rules", sql: "ALTER TABLE `category_rules` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','fixo','investimento','nao_categorizado') NOT NULL" },
+        { table: "installment_expenses", sql: "ALTER TABLE `installment_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL DEFAULT 'outros'" },
+        { table: "planned_expenses", sql: "ALTER TABLE `planned_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL DEFAULT 'outros'" },
+        { table: "pluggy_transactions", sql: "ALTER TABLE `pluggy_transactions` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','fixo','investimento','nao_categorizado') NOT NULL DEFAULT 'nao_categorizado'" },
+        { table: "qol_expenses", sql: "ALTER TABLE `qol_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL" },
+      ];
+      
+      for (const m of enumMigrations) {
+        try {
+          await db.execute(sql.raw(m.sql));
+          results.push(`✅ Enum updated: ${m.table}`);
+        } catch (e: any) {
+          results.push(`❌ Enum failed ${m.table}: ${e.message}`);
+        }
+      }
+      
+      res.json({ success: true, results });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message, results });
+    }
+  });
+
   // Debug endpoint for diagnosing dashboard issues
   app.get("/api/debug/funnel", async (req, res) => {
     const pin = req.query.pin;
