@@ -37,6 +37,13 @@ export async function getDb() {
   return _db;
 }
 
+// ─── Data Cutoff ──────────────────────────────────────────────────────────────
+// Ignore all Pluggy transactions before this date (user started tracking from July 2026)
+export const DATA_CUTOFF_DATE = new Date(2026, 5, 1); // June 1, 2026 (month is 0-indexed)
+// For month-based queries, only consider data from July 2026 (year=2026, month>=7)
+export const DATA_CUTOFF_YEAR = 2026;
+export const DATA_CUTOFF_MONTH = 7;
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -485,6 +492,8 @@ export async function deletePluggyConnection(pluggyItemId: string, userId: numbe
 }
 
 export async function getPluggyTransactions(userId: number, year: number, month: number) {
+  // Ignore data before the cutoff date
+  if (year < DATA_CUTOFF_YEAR || (year === DATA_CUTOFF_YEAR && month < DATA_CUTOFF_MONTH)) return [];
   const db = await getDb();
   if (!db) return [];
   const startDate = new Date(year, month - 1, 1);
@@ -580,6 +589,8 @@ export async function bulkUpdatePluggyTransactionCategories(
 // ─── Dashboard Aggregation ────────────────────────────────────────────────────
 
 export async function getDashboardSummary(userId: number, year: number, month: number) {
+  // Ignore data before the cutoff date
+  if (year < DATA_CUTOFF_YEAR || (year === DATA_CUTOFF_YEAR && month < DATA_CUTOFF_MONTH)) return null;
   const db = await getDb();
   if (!db) return null;
 
@@ -902,6 +913,8 @@ export async function dismissMonthlyInsight(userId: number, year: number, month:
 // ─── Dashboard Funnel (new v2 model) ────────────────────────────────────────
 
 export async function getDashboardFunnel(userId: number, year: number, month: number) {
+  // Ignore data before the cutoff date
+  if (year < DATA_CUTOFF_YEAR || (year === DATA_CUTOFF_YEAR && month < DATA_CUTOFF_MONTH)) return null;
   const db = await getDb();
   if (!db) return null;
   try {
@@ -1122,6 +1135,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
 export async function getInvestmentHistory(userId: number, year: number) {
   const db = await getDb();
   if (!db) return [];
+  // If the entire year is before the cutoff, return empty
+  if (year < DATA_CUTOFF_YEAR) return [];
 
   // Get real investment amounts per month from pluggy_transactions (debit + category='investimento')
   const startDate = new Date(year, 0, 1);
@@ -1169,9 +1184,13 @@ export async function getInvestmentHistory(userId: number, year: number) {
     targetMap.set(row.month, parseFloat(row.investmentTarget ?? "0"));
   }
 
-  // Return array of 12 months
+  // Return array of 12 months (filtered by cutoff for the cutoff year)
   return Array.from({ length: 12 }, (_, i) => {
     const month = i + 1;
+    // Skip months before the cutoff in the cutoff year
+    if (year === DATA_CUTOFF_YEAR && month < DATA_CUTOFF_MONTH) {
+      return { month, realInvestment: 0, target: 0 };
+    }
     const realInvestment = investmentMap.get(month) ?? 0;
     const target = targetMap.get(month) ?? 0;
     return { month, realInvestment, target };
