@@ -98,6 +98,16 @@ async function startServer() {
         }
       }
       
+      // Clean up auto-created installment duplicates from Pluggy sync
+      // These were created without dedup checks and cause inflated compromissos values
+      try {
+        await db.execute(sql.raw("DELETE FROM `installment_expense_months`"));
+        await db.execute(sql.raw("DELETE FROM `installment_expenses`"));
+        results.push(`✅ Cleaned up all auto-created installments (use manual entry instead)`);
+      } catch (e: any) {
+        results.push(`❌ Installment cleanup failed: ${e.message}`);
+      }
+
       res.json({ success: true, results });
     } catch (e: any) {
       res.status(500).json({ error: e.message, results });

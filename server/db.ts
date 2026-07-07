@@ -892,7 +892,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   if (!db) return null;
   try {
 
-  // 1. Total income (manual + pluggy)
+  // 1. Total income (prefer Pluggy when available, fallback to manual)
   const incomeResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${incomeEntries.amount}), 0)` })
     .from(incomeEntries)
@@ -915,7 +915,9 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       )
     );
   const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
-  const totalIncome = manualIncome + pluggyIncome;
+  // Use Pluggy income when available (avoids double-counting with manual entries)
+  // Manual income is only used as fallback when no Pluggy data exists
+  const totalIncome = pluggyIncome > 0 ? pluggyIncome : manualIncome;
 
   // 2. Fixed expenses (ONLY manual entries — Pluggy 'fixo' transactions are excluded
   //    because they would double-count with manual entries like rent)

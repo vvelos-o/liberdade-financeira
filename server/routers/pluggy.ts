@@ -89,7 +89,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   saude: ["farmácia", "drogaria", "médico", "hospital", "clínica", "dentista", "plano de saúde", "exame", "laboratorio", "remédio"],
   fixo: ["aluguel", "condomínio", "energia", "água", "internet", "telefone", "celular", "seguro"],
   investimento: ["investimento", "tesouro", "fundo", "ação", "cdb", "lci", "lca", "poupança", "xp", "btg", "rico", "clear"],
-  receita: ["salário", "salario", "pix recebido", "transferência recebida", "pagamento recebido"],
+  receita: ["salário", "salario", "pix recebido", "transferência recebida"],
 };
 
 // Patterns that indicate a transfer (not a real income or expense)
@@ -98,6 +98,7 @@ const TRANSFER_PATTERNS = [
   "pgto fatura",
   "pag fatura",
   "pagamento fatura",
+  "pagamento recebido",  // Bank confirmation of bill payment received (not real income)
   "transferencia entre contas",
   "transferência entre contas",
   "aplicacao",
@@ -230,31 +231,12 @@ export const pluggyRouter = router({
                 category: category as any,
               });
 
-              // Auto-detect installments (X/Y pattern like "KABUM 3/8" or "PARCELA 2 DE 6")
-              const installmentMatch = desc.match(/(\d{1,2})\s*[\/]\s*(\d{1,3})/) || desc.match(/(\d{1,2})\s+DE\s+(\d{1,3})/i);
-              if (installmentMatch && txType === "debit") {
-                const currentInstallment = parseInt(installmentMatch[1]);
-                const totalInstallments = parseInt(installmentMatch[2]);
-                if (totalInstallments >= 2 && totalInstallments <= 120 && currentInstallment <= totalInstallments) {
-                  // Extract clean name (remove installment pattern)
-                  const cleanDesc = desc.replace(installmentMatch[0], "").trim().replace(/\s+/g, " ");
-                  const txDate = new Date(tx.date ?? Date.now());
-                  const startMonth = txDate.getMonth() + 1 - (currentInstallment - 1);
-                  const startYear = txDate.getFullYear() + Math.floor((startMonth - 1) / 12);
-                  const normalizedStartMonth = ((startMonth - 1) % 12 + 12) % 12 + 1;
-                  try {
-                    await db.createInstallmentExpense(ctx.user.id, {
-                      description: cleanDesc || desc,
-                      totalAmount: String(amount * totalInstallments),
-                      installmentAmount: String(amount),
-                      totalInstallments,
-                      startYear: normalizedStartMonth > txDate.getMonth() + 1 ? startYear - 1 : startYear,
-                      startMonth: normalizedStartMonth,
-                      category: category === "nao_categorizado" ? "pessoal" : (category as any),
-                    });
-                  } catch { /* ignore duplicates */ }
-                }
-              }
+              // NOTE: Auto-installment creation from Pluggy was removed because:
+              // 1. It created duplicates on every re-sync (no unique constraint)
+              // 2. It double-counted: same amount in both compromissos AND variable spending
+              // Installments should be managed manually via the Gastos a Prazo page.
+              // Pluggy transactions with installment patterns (X/Y) are tracked as regular
+              // debit transactions in their respective variable spending categories.
               totalImported++;
             }
           }
