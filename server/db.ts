@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -917,28 +917,13 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
   const totalIncome = manualIncome + pluggyIncome;
 
-  // 2. Fixed expenses (manual + pluggy 'fixo' category)
+  // 2. Fixed expenses (ONLY manual entries — Pluggy 'fixo' transactions are excluded
+  //    because they would double-count with manual entries like rent)
   const fixedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
     .from(fixedExpenseEntries)
     .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
-  const manualFixed = parseFloat(fixedResult[0]?.total ?? "0");
-
-  // Pluggy fixed: debit transactions categorized as 'fixo' in this month
-  const pluggyFixedResult = await db
-    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
-    .from(pluggyTransactions)
-    .where(
-      and(
-        eq(pluggyTransactions.userId, userId),
-        eq(pluggyTransactions.type, "debit"),
-        eq(pluggyTransactions.category, "fixo"),
-        gte(pluggyTransactions.transactionDate, incomeStartDate),
-        lte(pluggyTransactions.transactionDate, incomeEndDate)
-      )
-    );
-  const pluggyFixed = parseFloat(pluggyFixedResult[0]?.total ?? "0");
-  const totalFixed = manualFixed + pluggyFixed;
+  const totalFixed = parseFloat(fixedResult[0]?.total ?? "0");
 
   // 3. Budget settings (investment target + category percentages)
   let investmentTarget = 0;
@@ -983,9 +968,11 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year), eq(qolExpenses.month, month)))
     .groupBy(qolExpenses.category);
 
-  // Also get spending from pluggy_transactions (debit, categorized, in this month)
+  // Also get spending from pluggy_transactions (debit, VARIABLE categories only, in this month)
+  // Exclude: fixo (already in manual fixed), receita, investimento, nao_categorizado
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59);
+  const variableCategories = ["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros"];
   const pluggyByCategory = await db
     .select({
       category: pluggyTransactions.category,
@@ -996,6 +983,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       and(
         eq(pluggyTransactions.userId, userId),
         eq(pluggyTransactions.type, "debit"),
+        inArray(pluggyTransactions.category, variableCategories as any),
         gte(pluggyTransactions.transactionDate, startDate),
         lte(pluggyTransactions.transactionDate, endDate)
       )
@@ -1013,8 +1001,10 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   }
 
   // Build category budgets and spending
+  // Note: percentages are stored as whole numbers (28 = 28%), so divide by 100
   const categories = Object.entries(categoryPercentages).map(([cat, pct]) => {
-    const budget = disponivel * (pct as number);
+    const pctValue = (pct as number) > 1 ? (pct as number) / 100 : (pct as number);
+    const budget = disponivel * pctValue;
     const spent = spendingMap.get(cat) ?? 0;
     return { category: cat, budget, spent, percentage: pct as number };
   });

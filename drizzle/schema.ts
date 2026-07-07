@@ -332,10 +332,10 @@ export const VARIABLE_CATEGORIES = variableCategoryEnum;
 export const FULL_CATEGORIES = fullCategoryEnum;
 
 export const DEFAULT_CATEGORY_PERCENTAGES: Record<string, number> = {
-  lazer: 0.28,
-  alimentacao: 0.28,
-  saude: 0.18,
-  transporte: 0.08,
-  pessoal: 0.10,
-  imprevistos: 0.08,
+  lazer: 28,
+  alimentacao: 28,
+  saude: 18,
+  transporte: 8,
+  pessoal: 10,
+  imprevistos: 8,
 };
