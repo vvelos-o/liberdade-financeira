@@ -641,7 +641,13 @@ export async function getDashboardSummary(userId: number, year: number, month: n
   const fixedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
     .from(fixedExpenseEntries)
-    .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
+    .innerJoin(fixedExpenseCategories, eq(fixedExpenseEntries.categoryId, fixedExpenseCategories.id))
+    .where(and(
+      eq(fixedExpenseEntries.userId, userId),
+      eq(fixedExpenseEntries.year, year),
+      eq(fixedExpenseEntries.month, month),
+      eq(fixedExpenseCategories.isActive, true)
+    ));
 
   const qolResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${qolExpenses.amount}), 0)` })
@@ -929,12 +935,18 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   // Transactions marked 'receita_contabilizada' are ignored (already in manual income)
   const totalIncome = manualIncome + pluggyExtraIncome;
 
-  // 2. Fixed expenses (ONLY manual entries — Pluggy 'fixo' transactions are excluded
-  //    because they would double-count with manual entries like rent)
+  // 2. Fixed expenses (ONLY manual entries from ACTIVE categories)
+  // Join with categories to exclude entries from deactivated categories
   const fixedResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${fixedExpenseEntries.amount}), 0)` })
     .from(fixedExpenseEntries)
-    .where(and(eq(fixedExpenseEntries.userId, userId), eq(fixedExpenseEntries.year, year), eq(fixedExpenseEntries.month, month)));
+    .innerJoin(fixedExpenseCategories, eq(fixedExpenseEntries.categoryId, fixedExpenseCategories.id))
+    .where(and(
+      eq(fixedExpenseEntries.userId, userId),
+      eq(fixedExpenseEntries.year, year),
+      eq(fixedExpenseEntries.month, month),
+      eq(fixedExpenseCategories.isActive, true)
+    ));
   const totalFixed = parseFloat(fixedResult[0]?.total ?? "0");
 
   // 3. Budget settings (investment target + category percentages)
