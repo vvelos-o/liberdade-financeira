@@ -16,6 +16,7 @@ const Inicio = lazy(() => import("./pages/Inicio"));
 const Transacoes = lazy(() => import("./pages/Transacoes"));
 const Configuracao = lazy(() => import("./pages/Configuracao"));
 const Historico = lazy(() => import("./pages/Historico"));
+const Investimentos = lazy(() => import("./pages/Investimentos"));
 
 function PageLoader() {
   return (
@@ -63,6 +64,7 @@ function AppRoutes() {
           <Route path="/" component={Inicio} />
           <Route path="/transacoes" component={Transacoes} />
           <Route path="/configuracao" component={Configuracao} />
+          <Route path="/investimentos" component={Investimentos} />
           <Route path="/historico" component={Historico} />
           <Route component={NotFound} />
         </Switch>

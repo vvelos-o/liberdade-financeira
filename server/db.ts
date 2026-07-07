@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -535,11 +535,18 @@ export async function upsertPluggyTransaction(
 export async function updatePluggyTransactionCategory(
   id: number,
   userId: number,
-  category: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "receita_contabilizada" | "fixo" | "investimento" | "nao_categorizado"
+  category: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "receita_contabilizada" | "fixo" | "investimento" | "nao_categorizado",
+  linkedExpenseId?: number | null,
+  linkedExpenseType?: "qol" | "planned" | "installment" | "fixed" | null
 ) {
   const db = await getDb();
   if (!db) return;
-  await db.update(pluggyTransactions).set({ category, isReviewed: true }).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+  await db.update(pluggyTransactions).set({
+    category,
+    isReviewed: true,
+    linkedExpenseId: linkedExpenseId ?? null,
+    linkedExpenseType: linkedExpenseType ?? null,
+  }).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
 }
 
 export async function getUncategorizedTransactions(userId: number, limit = 50) {
@@ -960,8 +967,29 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
 
   const totalCompromissos = totalInstallments + totalPlanned;
 
+  // Date range for this month (used by multiple queries below)
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+
+  // 5b. Real investment amount from Pluggy (transactions categorized as 'investimento')
+  const investmentRealResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        eq(pluggyTransactions.category, "investimento" as any),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    );
+  const realInvestment = parseFloat(investmentRealResult[0]?.total ?? "0");
+  // Use the greater of target or actual investment
+  const effectiveInvestment = Math.max(investmentTarget, realInvestment);
+
   // 6. Available for variable spending
-  const disponivel = Math.max(0, totalIncome - totalFixed - investmentTarget - totalCompromissos);
+  const disponivel = Math.max(0, totalIncome - totalFixed - effectiveInvestment - totalCompromissos);
 
   // 7. Actual spending per variable category (from qol_expenses + pluggy_transactions)
   const qolByCategory = await db
@@ -975,8 +1003,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
 
   // Also get spending from pluggy_transactions (debit, VARIABLE categories only, in this month)
   // Exclude: fixo (already in manual fixed), receita, investimento, nao_categorizado
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0, 23, 59, 59);
+  // Also exclude transactions linked to a fixed expense (linkedExpenseType='fixed')
   const variableCategories = ["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros"];
   const pluggyByCategory = await db
     .select({
@@ -989,13 +1016,32 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
         eq(pluggyTransactions.userId, userId),
         eq(pluggyTransactions.type, "debit"),
         inArray(pluggyTransactions.category, variableCategories as any),
+        isNull(pluggyTransactions.linkedExpenseType),
         gte(pluggyTransactions.transactionDate, startDate),
         lte(pluggyTransactions.transactionDate, endDate)
       )
     )
     .groupBy(pluggyTransactions.category);
 
-  // Merge spending from both sources
+  // Get credits (refunds/reimbursements) with variable categories to subtract from spending
+  const pluggyCreditsByCategory = await db
+    .select({
+      category: pluggyTransactions.category,
+      total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
+    })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "credit"),
+        inArray(pluggyTransactions.category, variableCategories as any),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    )
+    .groupBy(pluggyTransactions.category);
+
+  // Merge spending from both sources, then subtract credits
   const spendingMap = new Map<string, number>();
   for (const row of qolByCategory) {
     spendingMap.set(row.category, (spendingMap.get(row.category) ?? 0) + parseFloat(row.total));
@@ -1003,6 +1049,12 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
   for (const row of pluggyByCategory) {
     const cat = row.category as string;
     spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
+  }
+  // Subtract credits (refunds) from their respective categories
+  for (const row of pluggyCreditsByCategory) {
+    const cat = row.category as string;
+    const current = spendingMap.get(cat) ?? 0;
+    spendingMap.set(cat, Math.max(0, current - parseFloat(row.total)));
   }
 
   // Build category budgets and spending
@@ -1020,6 +1072,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     pluggyExtraIncome,
     totalFixed,
     investmentTarget,
+    realInvestment,
+    effectiveInvestment,
     totalCompromissos,
     totalInstallments,
     totalPlanned,
@@ -1037,6 +1091,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       pluggyExtraIncome: 0,
       totalFixed: 0,
       investmentTarget: 0,
+      realInvestment: 0,
+      effectiveInvestment: 0,
       totalCompromissos: 0,
       totalInstallments: 0,
       totalPlanned: 0,
@@ -1047,4 +1103,65 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       categoryPercentages: defaultPercentages,
     };
   }
+}
+
+// ─── Investment History ─────────────────────────────────────────────────────
+
+export async function getInvestmentHistory(userId: number, year: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Get real investment amounts per month from pluggy_transactions (debit + category='investimento')
+  const startDate = new Date(year, 0, 1);
+  const endDate = new Date(year, 11, 31, 23, 59, 59);
+
+  const monthlyInvestments = await db
+    .select({
+      month: sql<number>`MONTH(${pluggyTransactions.transactionDate})`,
+      total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
+    })
+    .from(pluggyTransactions)
+    .where(
+      and(
+        eq(pluggyTransactions.userId, userId),
+        eq(pluggyTransactions.type, "debit"),
+        eq(pluggyTransactions.category, "investimento" as any),
+        gte(pluggyTransactions.transactionDate, startDate),
+        lte(pluggyTransactions.transactionDate, endDate)
+      )
+    )
+    .groupBy(sql`MONTH(${pluggyTransactions.transactionDate})`);
+
+  // Get investment target from budget_settings for each month
+  const budgetRows = await db
+    .select({
+      month: budgetSettings.month,
+      investmentTarget: budgetSettings.investmentTarget,
+    })
+    .from(budgetSettings)
+    .where(
+      and(
+        eq(budgetSettings.userId, userId),
+        eq(budgetSettings.year, year)
+      )
+    );
+
+  // Build monthly map
+  const investmentMap = new Map<number, number>();
+  for (const row of monthlyInvestments) {
+    investmentMap.set(row.month, parseFloat(row.total));
+  }
+
+  const targetMap = new Map<number, number>();
+  for (const row of budgetRows) {
+    targetMap.set(row.month, parseFloat(row.investmentTarget ?? "0"));
+  }
+
+  // Return array of 12 months
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1;
+    const realInvestment = investmentMap.get(month) ?? 0;
+    const target = targetMap.get(month) ?? 0;
+    return { month, realInvestment, target };
+  });
 }

@@ -263,9 +263,11 @@ export const pluggyRouter = router({
     .input(z.object({
       id: z.number(),
       category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
+      linkedExpenseId: z.number().nullable().optional(),
+      linkedExpenseType: z.enum(["qol", "planned", "installment", "fixed"]).nullable().optional(),
     }))
     .mutation(({ ctx, input }) =>
-      db.updatePluggyTransactionCategory(input.id, ctx.user.id, input.category)
+      db.updatePluggyTransactionCategory(input.id, ctx.user.id, input.category, input.linkedExpenseId, input.linkedExpenseType)
     ),
 
   // Delete a connection

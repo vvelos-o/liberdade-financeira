@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   Settings,
   BarChart3,
+  TrendingUp,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const MONTH_NAMES_FULL = [
 const NAV_ITEMS = [
   { href: "/", icon: Home, label: "Início" },
   { href: "/transacoes", icon: ArrowLeftRight, label: "Transações" },
+  { href: "/investimentos", icon: TrendingUp, label: "Invest" },
   { href: "/configuracao", icon: Settings, label: "Config" },
   { href: "/historico", icon: BarChart3, label: "Histórico" },
 ];

@@ -3,24 +3,27 @@ import { useMonth } from "@/contexts/MonthContext";
 import { MoneyDisplay, formatMoney } from "@/components/finance/MoneyDisplay";
 import { CategoryBadge, CATEGORY_LABELS, VARIABLE_CATEGORIES, type FinanceCategory } from "@/components/finance/CategoryBadge";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Sparkles, Filter, Package, Calendar, Check, AlertCircle } from "lucide-react";
+import { RefreshCw, Sparkles, Filter, Package, Calendar, Check, AlertCircle, Link2, Unlink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import { useState } from "react";
 import { toast } from "sonner";
 
 // ─── Transaction Item ────────────────────────────────────────────────────────
 
-function TransactionItem({ tx, onCategoryChange }: {
+function TransactionItem({ tx, onCategoryChange, onLinkToFixed, fixedExpenses }: {
   tx: any;
   onCategoryChange: (id: number, category: string) => void;
+  onLinkToFixed: (id: number, fixedExpenseId: number) => void;
+  fixedExpenses: any[] | undefined;
 }) {
   const [editing, setEditing] = useState(false);
   const date = new Date(tx.transactionDate);
   const isUncategorized = tx.category === "nao_categorizado";
+  const isLinkedToFixed = tx.linkedExpenseType === "fixed" && tx.linkedExpenseId;
 
   return (
     <div className={cn(
@@ -35,28 +38,78 @@ function TransactionItem({ tx, onCategoryChange }: {
           </span>
           {editing ? (
             <Select
-              value={tx.category}
+              value={isLinkedToFixed ? `linked_${tx.linkedExpenseId}` : tx.category}
               onValueChange={(val) => {
-                onCategoryChange(tx.id, val);
+                if (val.startsWith("linked_")) {
+                  const fixedId = parseInt(val.replace("linked_", ""), 10);
+                  onLinkToFixed(tx.id, fixedId);
+                } else if (val === "__unlink__") {
+                  // Unlink: set back to nao_categorizado
+                  onCategoryChange(tx.id, "nao_categorizado");
+                } else {
+                  onCategoryChange(tx.id, val);
+                }
                 setEditing(false);
               }}
             >
-              <SelectTrigger className="h-6 text-[10px] w-auto min-w-[100px] px-2">
+              <SelectTrigger className="h-6 text-[10px] w-auto min-w-[120px] px-2">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {VARIABLE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
-                ))}
-                <SelectItem value="receita">Receita Extra</SelectItem>
-                <SelectItem value="receita_contabilizada">Já Contabilizado</SelectItem>
-                <SelectItem value="fixo">Fixo</SelectItem>
-                <SelectItem value="investimento">Investimento</SelectItem>
+                <SelectGroup>
+                  <SelectLabel className="text-[10px]">Categorias</SelectLabel>
+                  {VARIABLE_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
+                  ))}
+                  <SelectItem value="receita">Receita Extra</SelectItem>
+                  <SelectItem value="receita_contabilizada">Já Contabilizado</SelectItem>
+                  <SelectItem value="fixo">Fixo (genérico)</SelectItem>
+                  <SelectItem value="investimento">Investimento</SelectItem>
+                </SelectGroup>
+
+                {/* Fixed expense linking section - only for debits */}
+                {tx.type === "debit" && fixedExpenses && fixedExpenses.length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] flex items-center gap-1">
+                        <Link2 className="h-3 w-3" />
+                        Vincular a Gasto Fixo
+                      </SelectLabel>
+                      {fixedExpenses.map((fe: any) => (
+                        <SelectItem key={`linked_${fe.id}`} value={`linked_${fe.id}`}>
+                          {fe.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </>
+                )}
+
+                {/* Unlink option if currently linked */}
+                {isLinkedToFixed && (
+                  <>
+                    <SelectSeparator />
+                    <SelectItem value="__unlink__" className="text-destructive">
+                      <span className="flex items-center gap-1">
+                        <Unlink className="h-3 w-3" />
+                        Desvincular
+                      </span>
+                    </SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           ) : (
             <button onClick={() => setEditing(true)} className="transition-opacity hover:opacity-80">
-              <CategoryBadge category={tx.category as FinanceCategory} size="sm" />
+              <div className="flex items-center gap-1">
+                <CategoryBadge category={tx.category as FinanceCategory} size="sm" />
+                {isLinkedToFixed && (
+                  <span className="text-[9px] text-primary flex items-center gap-0.5">
+                    <Link2 className="h-2.5 w-2.5" />
+                    vinculado
+                  </span>
+                )}
+              </div>
             </button>
           )}
         </div>
@@ -153,10 +206,12 @@ export default function Transacoes() {
 
   const { data: transactions, isLoading } = trpc.pluggy.getTransactions.useQuery({ year, month });
   const { data: uncategorized } = trpc.pluggy.getUncategorized.useQuery({ limit: 50 });
+  const { data: fixedExpenses } = trpc.fixedExpenses.getCategories.useQuery();
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
   const aiSuggestMutation = trpc.pluggy.aiSuggestCategories.useMutation();
   const applyMutation = trpc.pluggy.applyCategories.useMutation();
   const correctMutation = trpc.pluggy.correctCategory.useMutation();
+  const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation();
   const utils = trpc.useUtils();
 
   const uncategorizedCount = uncategorized?.length ?? 0;
@@ -164,6 +219,7 @@ export default function Transacoes() {
   const filteredTransactions = transactions?.filter((tx: any) => {
     if (categoryFilter === "all") return true;
     if (categoryFilter === "uncategorized") return tx.category === "nao_categorizado";
+    if (categoryFilter === "linked") return tx.linkedExpenseType === "fixed";
     return tx.category === categoryFilter;
   }) ?? [];
 
@@ -208,7 +264,7 @@ export default function Transacoes() {
     const queryKey = { year, month };
     utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
       if (!old) return old;
-      return old.map((t: any) => t.id === id ? { ...t, category, isReviewed: true } : t);
+      return old.map((t: any) => t.id === id ? { ...t, category, isReviewed: true, linkedExpenseId: null, linkedExpenseType: null } : t);
     });
     correctMutation.mutate({ transactionId: id, category: category as any, description: tx.description ?? "" }, {
       onSuccess: () => {
@@ -220,6 +276,33 @@ export default function Transacoes() {
         console.error("correctCategory error:", err);
         toast.error("Erro ao redefinir categoria. Tente novamente.");
         // Rollback optimistic update
+        utils.pluggy.getTransactions.invalidate();
+      },
+    });
+  };
+
+  const handleLinkToFixed = (id: number, fixedExpenseId: number) => {
+    // Optimistic update
+    const queryKey = { year, month };
+    utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
+      if (!old) return old;
+      return old.map((t: any) => t.id === id ? { ...t, category: "fixo", linkedExpenseId: fixedExpenseId, linkedExpenseType: "fixed", isReviewed: true } : t);
+    });
+    updateCategoryMutation.mutate({
+      id,
+      category: "fixo",
+      linkedExpenseId: fixedExpenseId,
+      linkedExpenseType: "fixed",
+    }, {
+      onSuccess: () => {
+        const fe = fixedExpenses?.find((f: any) => f.id === fixedExpenseId);
+        toast.success(`Vinculado a "${fe?.name ?? "gasto fixo"}".`);
+        utils.pluggy.getUncategorized.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+      },
+      onError: (err) => {
+        console.error("linkToFixed error:", err);
+        toast.error("Erro ao vincular. Tente novamente.");
         utils.pluggy.getTransactions.invalidate();
       },
     });
@@ -262,6 +345,7 @@ export default function Transacoes() {
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="uncategorized">Pendentes</SelectItem>
+              <SelectItem value="linked">Vinculados</SelectItem>
               {VARIABLE_CATEGORIES.map((cat) => (
                 <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
               ))}
@@ -319,7 +403,12 @@ export default function Transacoes() {
           <div className="space-y-1">
             {filteredTransactions.map((tx: any, index: number) => (
               <div key={tx.id} className="stagger-item" style={{ animationDelay: `${index * 30}ms` }}>
-                <TransactionItem tx={tx} onCategoryChange={handleCategoryChange} />
+                <TransactionItem
+                  tx={tx}
+                  onCategoryChange={handleCategoryChange}
+                  onLinkToFixed={handleLinkToFixed}
+                  fixedExpenses={fixedExpenses}
+                />
               </div>
             ))}
           </div>

@@ -362,6 +362,9 @@ const annualRouter = router({
   getPlannedHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
     db.getPlannedExpensesForYear(ctx.user.id, input.year)
   ),
+  getInvestmentHistory: protectedProcedure.input(z.object({ year: z.number() })).query(({ ctx, input }) =>
+    db.getInvestmentHistory(ctx.user.id, input.year)
+  ),
 });
 
 // ─── App Router ───────────────────────────────────────────────────────────────
