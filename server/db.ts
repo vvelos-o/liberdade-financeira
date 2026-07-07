@@ -675,7 +675,8 @@ export async function getDashboardSummary(userId: number, year: number, month: n
 
   // Use Pluggy data when available, fall back to manual entries
   const hasPluggyData = pluggyIncome > 0 || pluggyExpenses > 0;
-  const totalIncome = hasPluggyData ? pluggyIncome : manualIncome;
+  // Manual income is source of truth; Pluggy only as fallback
+  const totalIncome = manualIncome > 0 ? manualIncome : pluggyIncome;
   const totalExpenses = hasPluggyData
     ? pluggyExpenses
     : totalFixed + totalQol + totalInstallments + totalPlanned;
@@ -915,9 +916,11 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       )
     );
   const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
-  // Use Pluggy income when available (avoids double-counting with manual entries)
-  // Manual income is only used as fallback when no Pluggy data exists
-  const totalIncome = pluggyIncome > 0 ? pluggyIncome : manualIncome;
+  // Income priority: manual entries are the source of truth (user explicitly defines them).
+  // Pluggy income is only used as fallback when no manual income exists.
+  // This avoids the case where Pluggy captures partial income (e.g., only PIX transfers)
+  // while the user has defined their full salary + extras manually.
+  const totalIncome = manualIncome > 0 ? manualIncome : pluggyIncome;
 
   // 2. Fixed expenses (ONLY manual entries — Pluggy 'fixo' transactions are excluded
   //    because they would double-count with manual entries like rent)
