@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Utensils, Car, Heart, Gamepad2, MoreHorizontal, TrendingUp, Home, Briefcase, ShoppingBag, Shield } from "lucide-react";
 
-export type FinanceCategory = "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos" | "receita" | "fixo" | "investimento" | "nao_categorizado";
+export type FinanceCategory = "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "pessoal" | "imprevistos" | "receita" | "receita_contabilizada" | "fixo" | "investimento" | "nao_categorizado";
 
 const CATEGORY_CONFIG: Record<FinanceCategory, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   lazer: { label: "Lazer", icon: Gamepad2, color: "text-purple-400", bg: "bg-purple-400/10" },
@@ -11,7 +11,8 @@ const CATEGORY_CONFIG: Record<FinanceCategory, { label: string; icon: React.Elem
   outros: { label: "Outros", icon: MoreHorizontal, color: "text-gray-400", bg: "bg-gray-400/10" },
   pessoal: { label: "Pessoal", icon: ShoppingBag, color: "text-pink-400", bg: "bg-pink-400/10" },
   imprevistos: { label: "Imprevistos", icon: Shield, color: "text-amber-400", bg: "bg-amber-400/10" },
-  receita: { label: "Receita", icon: TrendingUp, color: "text-green-400", bg: "bg-green-400/10" },
+  receita: { label: "Receita Extra", icon: TrendingUp, color: "text-green-400", bg: "bg-green-400/10" },
+  receita_contabilizada: { label: "Já Contabilizado", icon: TrendingUp, color: "text-green-700", bg: "bg-green-700/10" },
   fixo: { label: "Fixo", icon: Home, color: "text-yellow-400", bg: "bg-yellow-400/10" },
   investimento: { label: "Investimento", icon: Briefcase, color: "text-teal-400", bg: "bg-teal-400/10" },
   nao_categorizado: { label: "Não categorizado", icon: MoreHorizontal, color: "text-gray-500", bg: "bg-gray-500/10" },

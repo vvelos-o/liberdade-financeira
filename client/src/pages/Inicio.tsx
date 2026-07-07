@@ -29,7 +29,7 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
 
   if (!data) return null;
 
-  const { totalIncome, totalFixed, investmentTarget, totalCompromissos, disponivel } = data;
+  const { totalIncome, manualIncome, pluggyExtraIncome, totalFixed, investmentTarget, totalCompromissos, disponivel } = data;
 
   return (
     <Card className="bg-card border-border overflow-hidden">
@@ -51,6 +51,11 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
         {expanded && (
           <div className="mt-3 pt-3 border-t border-border space-y-2 animate-count-up">
             <FunnelRow label="Renda" value={totalIncome} type="income" />
+            {pluggyExtraIncome > 0 && (
+              <p className="text-[10px] text-muted-foreground ml-1">
+                (Fixa: {formatMoney(manualIncome)} + Extras: {formatMoney(pluggyExtraIncome)})
+              </p>
+            )}
             <FunnelRow label="Gastos fixos" value={-totalFixed} type="expense" />
             <FunnelRow label="Investimento" value={-investmentTarget} type="expense" />
             {totalCompromissos > 0 && (

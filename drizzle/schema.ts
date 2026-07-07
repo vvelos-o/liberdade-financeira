@@ -15,7 +15,7 @@ import {
 // ─── Category Enums (shared) ─────────────────────────────────────────────────
 
 const variableCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos"] as const;
-const fullCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos", "receita", "fixo", "investimento", "nao_categorizado"] as const;
+const fullCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"] as const;
 
 // ─── Core Auth ────────────────────────────────────────────────────────────────
 

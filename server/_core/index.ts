@@ -81,10 +81,10 @@ async function startServer() {
       
       // Update enums to include pessoal/imprevistos
       const enumMigrations = [
-        { table: "category_rules", sql: "ALTER TABLE `category_rules` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','fixo','investimento','nao_categorizado') NOT NULL" },
+        { table: "category_rules", sql: "ALTER TABLE `category_rules` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','receita_contabilizada','fixo','investimento','nao_categorizado') NOT NULL" },
         { table: "installment_expenses", sql: "ALTER TABLE `installment_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL DEFAULT 'outros'" },
         { table: "planned_expenses", sql: "ALTER TABLE `planned_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL DEFAULT 'outros'" },
-        { table: "pluggy_transactions", sql: "ALTER TABLE `pluggy_transactions` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','fixo','investimento','nao_categorizado') NOT NULL DEFAULT 'nao_categorizado'" },
+        { table: "pluggy_transactions", sql: "ALTER TABLE `pluggy_transactions` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos','receita','receita_contabilizada','fixo','investimento','nao_categorizado') NOT NULL DEFAULT 'nao_categorizado'" },
         { table: "qol_expenses", sql: "ALTER TABLE `qol_expenses` MODIFY COLUMN `category` enum('lazer','alimentacao','transporte','saude','outros','pessoal','imprevistos') NOT NULL" },
         { table: "pluggy_transactions_type", sql: "ALTER TABLE `pluggy_transactions` MODIFY COLUMN `type` enum('debit','credit','transfer') NOT NULL" },
       ];

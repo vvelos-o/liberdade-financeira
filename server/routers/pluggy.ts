@@ -89,7 +89,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   saude: ["farmácia", "drogaria", "médico", "hospital", "clínica", "dentista", "plano de saúde", "exame", "laboratorio", "remédio"],
   fixo: ["aluguel", "condomínio", "energia", "água", "internet", "telefone", "celular", "seguro"],
   investimento: ["investimento", "tesouro", "fundo", "ação", "cdb", "lci", "lca", "poupança", "xp", "btg", "rico", "clear"],
-  receita: ["salário", "salario", "pix recebido", "transferência recebida"],
+  receita_contabilizada: ["salário", "salario"],
+  receita: ["pix recebido", "transferência recebida"],
 };
 
 // Patterns that indicate a transfer (not a real income or expense)
@@ -111,7 +112,7 @@ function isTransferTransaction(description: string): boolean {
   return TRANSFER_PATTERNS.some(pattern => lower.includes(pattern));
 }
 
-function autoCategorize(description: string): "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado" {
+function autoCategorize(description: string): "lazer" | "alimentacao" | "transporte" | "saude" | "outros" | "receita" | "receita_contabilizada" | "fixo" | "investimento" | "nao_categorizado" {
   const lower = description.toLowerCase();
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     if (keywords.some((kw) => lower.includes(kw))) {
@@ -261,7 +262,7 @@ export const pluggyRouter = router({
   updateCategory: protectedProcedure
     .input(z.object({
       id: z.number(),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
     }))
     .mutation(({ ctx, input }) =>
       db.updatePluggyTransactionCategory(input.id, ctx.user.id, input.category)
@@ -375,7 +376,7 @@ Responda APENAS com JSON no formato:
     .input(z.object({
       updates: z.array(z.object({
         id: z.number(),
-        category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+        category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
       })),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -390,7 +391,7 @@ Responda APENAS com JSON no formato:
   saveRule: protectedProcedure
     .input(z.object({
       pattern: z.string().min(1),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
       source: z.enum(["user_correction", "manual"]).default("user_correction"),
     }))
     .mutation(({ ctx, input }) =>
@@ -405,7 +406,7 @@ Responda APENAS com JSON no formato:
   correctCategory: protectedProcedure
     .input(z.object({
       transactionId: z.number(),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "fixo", "investimento", "nao_categorizado"]),
+      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
       description: z.string(), // the transaction description to use as pattern
     }))
     .mutation(async ({ ctx, input }) => {

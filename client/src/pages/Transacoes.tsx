@@ -48,7 +48,8 @@ function TransactionItem({ tx, onCategoryChange }: {
                 {VARIABLE_CATEGORIES.map((cat) => (
                   <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
                 ))}
-                <SelectItem value="receita">Receita</SelectItem>
+                <SelectItem value="receita">Receita Extra</SelectItem>
+                <SelectItem value="receita_contabilizada">Já Contabilizado</SelectItem>
                 <SelectItem value="fixo">Fixo</SelectItem>
                 <SelectItem value="investimento">Investimento</SelectItem>
               </SelectContent>
@@ -63,12 +64,17 @@ function TransactionItem({ tx, onCategoryChange }: {
       <div className="text-right flex-shrink-0">
         <span className={cn(
           "font-money text-sm font-semibold",
+          tx.category === "receita_contabilizada" ? "text-muted-foreground" :
+          tx.category === "receita" ? "text-positive" :
           tx.type === "credit" ? "text-positive" : tx.type === "transfer" ? "text-muted-foreground" : "text-foreground"
         )}>
           {tx.type === "credit" ? "+" : tx.type === "transfer" ? "" : "-"}{formatMoney(parseFloat(tx.amount))}
         </span>
         {tx.type === "transfer" && (
           <span className="text-xs text-muted-foreground block">transferência</span>
+        )}
+        {tx.category === "receita_contabilizada" && (
+          <span className="text-xs text-muted-foreground block">já na renda</span>
         )}
       </div>
     </div>

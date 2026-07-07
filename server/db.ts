@@ -535,7 +535,7 @@ export async function upsertPluggyTransaction(
 export async function updatePluggyTransactionCategory(
   id: number,
   userId: number,
-  category: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado"
+  category: "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "receita_contabilizada" | "fixo" | "investimento" | "nao_categorizado"
 ) {
   const db = await getDb();
   if (!db) return;
@@ -675,8 +675,8 @@ export async function getDashboardSummary(userId: number, year: number, month: n
 
   // Use Pluggy data when available, fall back to manual entries
   const hasPluggyData = pluggyIncome > 0 || pluggyExpenses > 0;
-  // Manual income is source of truth; Pluggy only as fallback
-  const totalIncome = manualIncome > 0 ? manualIncome : pluggyIncome;
+  // Manual income + Pluggy extras (category='receita'); 'receita_contabilizada' is ignored
+  const totalIncome = manualIncome + pluggyIncome;
   const totalExpenses = hasPluggyData
     ? pluggyExpenses
     : totalFixed + totalQol + totalInstallments + totalPlanned;
@@ -900,10 +900,12 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     .where(and(eq(incomeEntries.userId, userId), eq(incomeEntries.year, year), eq(incomeEntries.month, month)));
   const manualIncome = parseFloat(incomeResult[0]?.total ?? "0");
 
-  // Pluggy income: credit transactions categorized as 'receita' in this month
+  // Pluggy "receita" extras: credit transactions categorized as 'receita' (NOT 'receita_contabilizada')
+  // These are extra income that the user wants to ADD to their disponível (e.g., friends splitting a bill)
+  // 'receita_contabilizada' = already part of manual income (e.g., salary PIX), ignored in calculations
   const incomeStartDate = new Date(year, month - 1, 1);
   const incomeEndDate = new Date(year, month, 0, 23, 59, 59);
-  const pluggyIncomeResult = await db
+  const pluggyExtraIncomeResult = await db
     .select({ total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)` })
     .from(pluggyTransactions)
     .where(
@@ -915,12 +917,10 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
         lte(pluggyTransactions.transactionDate, incomeEndDate)
       )
     );
-  const pluggyIncome = parseFloat(pluggyIncomeResult[0]?.total ?? "0");
-  // Income priority: manual entries are the source of truth (user explicitly defines them).
-  // Pluggy income is only used as fallback when no manual income exists.
-  // This avoids the case where Pluggy captures partial income (e.g., only PIX transfers)
-  // while the user has defined their full salary + extras manually.
-  const totalIncome = manualIncome > 0 ? manualIncome : pluggyIncome;
+  const pluggyExtraIncome = parseFloat(pluggyExtraIncomeResult[0]?.total ?? "0");
+  // Total income = manual (source of truth) + Pluggy extras (category='receita')
+  // Transactions marked 'receita_contabilizada' are ignored (already in manual income)
+  const totalIncome = manualIncome + pluggyExtraIncome;
 
   // 2. Fixed expenses (ONLY manual entries — Pluggy 'fixo' transactions are excluded
   //    because they would double-count with manual entries like rent)
@@ -1016,6 +1016,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
 
   return {
     totalIncome,
+    manualIncome,
+    pluggyExtraIncome,
     totalFixed,
     investmentTarget,
     totalCompromissos,
@@ -1031,6 +1033,8 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     const defaultPercentages = DEFAULT_CATEGORY_PERCENTAGES;
     return {
       totalIncome: 0,
+      manualIncome: 0,
+      pluggyExtraIncome: 0,
       totalFixed: 0,
       investmentTarget: 0,
       totalCompromissos: 0,
