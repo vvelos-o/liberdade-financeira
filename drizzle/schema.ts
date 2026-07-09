@@ -291,22 +291,6 @@ export const pluggyTransactions = mysqlTable("pluggy_transactions", {
   userDateIdx: index("pluggy_transactions_user_date").on(t.userId, t.transactionDate),
 }));
 
-// ─── Category Rules (Learned AI Rules) ───────────────────────────────────────
-
-export const categoryRules = mysqlTable("category_rules", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  pattern: varchar("pattern", { length: 500 }).notNull(),
-  category: mysqlEnum("category", fullCategoryEnum).notNull(),
-  confidence: int("confidence").default(1).notNull(),
-  source: mysqlEnum("source", ["user_correction", "manual"]).default("user_correction").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (t) => ({
-  userIdx: index("category_rules_user_idx").on(t.userId),
-  patternIdx: index("category_rules_pattern_idx").on(t.userId, t.pattern),
-}));
-
 // ─── Type Exports ────────────────────────────────────────────────────────────
 
 export type BudgetSettings = typeof budgetSettings.$inferSelect;
@@ -324,7 +308,6 @@ export type FinancialGoal = typeof financialGoals.$inferSelect;
 export type MonthlyInsight = typeof monthlyInsights.$inferSelect;
 export type PluggyConnection = typeof pluggyConnections.$inferSelect;
 export type PluggyTransaction = typeof pluggyTransactions.$inferSelect;
-export type CategoryRule = typeof categoryRules.$inferSelect;
 
 // ─── Shared Constants ────────────────────────────────────────────────────────
 
