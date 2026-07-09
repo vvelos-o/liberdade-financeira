@@ -196,17 +196,12 @@ describe("Finance Master - Backend Procedures", () => {
       expect(Array.isArray(result)).toBe(true);
     });
 
-    it("getRules returns an array", async () => {
-      const result = await caller.pluggy.getRules();
-      expect(Array.isArray(result)).toBe(true);
-    });
-
     it("getTransactions returns an array", async () => {
       const result = await caller.pluggy.getTransactions({ year: 2026, month: 7 });
       expect(Array.isArray(result)).toBe(true);
     });
 
-    it("correctCategory updates category and creates a rule", async () => {
+    it("correctCategory updates category", async () => {
       // First insert a test transaction directly via db
       const db = await import("./db");
       await db.upsertPluggyTransaction(1, {
@@ -237,12 +232,6 @@ describe("Finance Master - Backend Procedures", () => {
       const updatedTx = txsAfter.find((t: any) => t.id === testTx.id);
       expect(updatedTx.category).toBe("transporte");
       expect(updatedTx.isReviewed).toBe(true);
-
-      // Verify a rule was created
-      const rules = await caller.pluggy.getRules();
-      const uberRule = rules.find((r: any) => r.pattern.includes("UBER"));
-      expect(uberRule).toBeDefined();
-      expect(uberRule.category).toBe("transporte");
     });
   });
 

@@ -4,7 +4,7 @@ import { formatMoney } from "@/components/finance/MoneyDisplay";
 import { CATEGORY_LABELS, VARIABLE_CATEGORIES, CATEGORY_COLORS } from "@/components/finance/CategoryBadge";
 import { cn } from "@/lib/utils";
 import {
-  DollarSign, Home, Target, Percent, BookOpen, Link2, Plus, Trash2, Save, Edit2, Check, X, CreditCard, Copy,
+  DollarSign, Home, Target, Percent, Link2, Plus, Trash2, Save, Edit2, Check, X, CreditCard, Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -745,52 +745,6 @@ function PlannedExpensesSection() {
   );
 }
 
-// ─── Category Rules Section ──────────────────────────────────────────────────
-
-function RulesSection() {
-  const { data: rules, isLoading } = trpc.pluggy.getRules.useQuery();
-  const deleteMutation = trpc.pluggy.deleteRule.useMutation();
-  const utils = trpc.useUtils();
-
-  return (
-    <Card className="bg-card border-border">
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          Regras Aprendidas ({rules?.length ?? 0})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-2">
-        {isLoading ? (
-          <Skeleton className="h-8 w-full" />
-        ) : rules && rules.length > 0 ? (
-          <div className="space-y-1.5 max-h-60 overflow-y-auto">
-            {rules.map((rule: any) => (
-              <div key={rule.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-secondary/30">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-foreground font-mono truncate">"{rule.pattern}"</span>
-                  <span className="text-[10px] text-muted-foreground">→</span>
-                  <Badge variant="secondary" className="text-[10px]">{CATEGORY_LABELS[rule.category] ?? rule.category}</Badge>
-                </div>
-                <button
-                  onClick={() => deleteMutation.mutate({ id: rule.id }, { onSuccess: () => utils.pluggy.getRules.invalidate() })}
-                  className="text-muted-foreground hover:text-destructive transition-colors p-1 flex-shrink-0"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground text-center py-3">
-            Nenhuma regra aprendida ainda. Corrija categorias nas Transações para ensinar a IA.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Pluggy Connection Section ───────────────────────────────────────────────
 
 function PluggySection() {
@@ -947,7 +901,6 @@ export default function Configuracao() {
 
         <TabsContent value="metas" className="space-y-4 mt-4">
           <GoalsSection />
-          <RulesSection />
         </TabsContent>
 
         <TabsContent value="conexao" className="space-y-4 mt-4">

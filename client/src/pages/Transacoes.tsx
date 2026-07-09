@@ -3,7 +3,7 @@ import { useMonth } from "@/contexts/MonthContext";
 import { MoneyDisplay, formatMoney } from "@/components/finance/MoneyDisplay";
 import { CategoryBadge, CATEGORY_LABELS, VARIABLE_CATEGORIES, type FinanceCategory } from "@/components/finance/CategoryBadge";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Sparkles, Filter, Package, Calendar, Check, AlertCircle, Link2, Unlink } from "lucide-react";
+import { RefreshCw, Filter, Package, Calendar, Check, Link2, Unlink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -258,19 +258,15 @@ export default function Transacoes() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const { data: transactions, isLoading } = trpc.pluggy.getTransactions.useQuery({ year, month });
-  const { data: uncategorized } = trpc.pluggy.getUncategorized.useQuery({ limit: 50 });
   const { data: fixedExpenses } = trpc.fixedExpenses.getCategories.useQuery();
   const { data: plannedExpenses } = trpc.planned.getExpenses.useQuery({ year, month });
   const { data: installmentMonths } = trpc.installments.getMonthsForPeriod.useQuery({ year, month });
   const { data: allInstallments } = trpc.installments.getAll.useQuery();
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
-  const aiSuggestMutation = trpc.pluggy.aiSuggestCategories.useMutation();
-  const applyMutation = trpc.pluggy.applyCategories.useMutation();
   const correctMutation = trpc.pluggy.correctCategory.useMutation();
   const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation();
   const utils = trpc.useUtils();
 
-  const uncategorizedCount = uncategorized?.length ?? 0;
 
   const filteredTransactions = transactions?.filter((tx: any) => {
     if (categoryFilter === "all") return true;
@@ -284,34 +280,12 @@ export default function Transacoes() {
       onSuccess: (data) => {
         toast.success(`Sincronizado! ${data.totalImported} transações importadas.`);
         utils.pluggy.getTransactions.invalidate();
-        utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
       onError: () => toast.error("Erro ao sincronizar. Tente novamente."),
     });
   };
 
-  const handleAICategorize = () => {
-    const ids = (uncategorized ?? []).map((t: any) => t.id).slice(0, 50);
-    if (ids.length === 0) return;
-    aiSuggestMutation.mutate({ transactionIds: ids }, {
-      onSuccess: (data: any) => {
-        if (data.suggestions && data.suggestions.length > 0) {
-          applyMutation.mutate({ updates: data.suggestions.map((s: any) => ({ id: s.id, category: s.category })) }, {
-            onSuccess: (result: any) => {
-              toast.success(`${result.applied} transações categorizadas pela IA.`);
-              utils.pluggy.getTransactions.invalidate();
-              utils.pluggy.getUncategorized.invalidate();
-              utils.dashboard.getFunnel.invalidate();
-            },
-          });
-        } else {
-          toast.info("Nenhuma sugestão gerada.");
-        }
-      },
-      onError: () => toast.error("Erro ao categorizar. Tente novamente."),
-    });
-  };
 
   const handleCategoryChange = (id: number, category: string) => {
     const tx = filteredTransactions.find((t: any) => t.id === id);
@@ -325,7 +299,6 @@ export default function Transacoes() {
     correctMutation.mutate({ transactionId: id, category: category as any, description: tx.description ?? "" }, {
       onSuccess: () => {
         toast.success("Categoria atualizada.");
-        utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
       onError: (err) => {
@@ -353,7 +326,6 @@ export default function Transacoes() {
       onSuccess: () => {
         const fe = fixedExpenses?.find((f: any) => f.id === fixedExpenseId);
         toast.success(`Vinculado a "${fe?.name ?? "gasto fixo"}".`);
-        utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
       onError: (err) => {
@@ -379,7 +351,6 @@ export default function Transacoes() {
       onSuccess: () => {
         const pe = plannedExpenses?.find((p: any) => p.id === plannedExpenseId);
         toast.success(`Vinculado a "${pe?.description ?? "gasto programado"}".`);
-        utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
       onError: (err) => {
@@ -406,7 +377,6 @@ export default function Transacoes() {
         const im = installmentMonths?.find((i: any) => i.id === installmentMonthId);
         const parent = allInstallments?.find((a: any) => a.id === im?.installmentExpenseId);
         toast.success(`Vinculado a "${parent?.description ?? "parcela"}".`);
-        utils.pluggy.getUncategorized.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
       onError: (err) => {
@@ -432,18 +402,7 @@ export default function Transacoes() {
           Sync
         </Button>
 
-        {uncategorizedCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAICategorize}
-            disabled={aiSuggestMutation.isPending}
-            className="gap-1.5"
-          >
-            <Sparkles className={cn("h-3.5 w-3.5", aiSuggestMutation.isPending && "animate-spin")} />
-            Categorizar ({uncategorizedCount})
-          </Button>
-        )}
+
 
         <div className="ml-auto">
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -465,15 +424,7 @@ export default function Transacoes() {
         </div>
       </div>
 
-      {/* Uncategorized Alert */}
-      {uncategorizedCount > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-          <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0" />
-          <p className="text-xs text-amber-200">
-            {uncategorizedCount} transaç{uncategorizedCount === 1 ? "ão" : "ões"} para categorizar
-          </p>
-        </div>
-      )}
+
 
       {/* Compromissos */}
       <CompromissosSection year={year} month={month} />
