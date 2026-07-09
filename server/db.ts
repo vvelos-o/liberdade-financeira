@@ -17,7 +17,6 @@ import {
   pluggyTransactions,
   qolExpenses,
   users,
-  categoryRules,
   monthlyInsights,
   DEFAULT_CATEGORY_PERCENTAGES,
 } from "../drizzle/schema";
@@ -558,33 +557,7 @@ export async function updatePluggyTransactionCategory(
   }).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
 }
 
-export async function getUncategorizedTransactions(userId: number, limit = 50) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(pluggyTransactions)
-    .where(and(eq(pluggyTransactions.userId, userId), eq(pluggyTransactions.category, "nao_categorizado")))
-    .orderBy(desc(pluggyTransactions.transactionDate))
-    .limit(limit);
-}
 
-export async function bulkUpdatePluggyTransactionCategories(
-  updates: Array<{ id: number; category: string }>,
-  userId: number
-) {
-  const db = await getDb();
-  if (!db) return;
-  for (const { id, category } of updates) {
-    await db
-      .update(pluggyTransactions)
-      .set({
-        category: category as "lazer" | "alimentacao" | "transporte" | "saude" | "pessoal" | "imprevistos" | "outros" | "receita" | "fixo" | "investimento" | "nao_categorizado",
-        isReviewed: true,
-      })
-      .where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
-  }
-}
 
 // ─── Dashboard Aggregation ────────────────────────────────────────────────────
 
@@ -756,8 +729,10 @@ export async function getDashboardSummary(userId: number, year: number, month: n
 export async function getAnnualQolHistory(userId: number, year: number) {
   const db = await getDb();
   if (!db) return [];
+  // If year is before cutoff, return empty
+  if (year < DATA_CUTOFF_YEAR) return [];
 
-  // Manual qol_expenses
+  // Manual qol_expenses (filter months >= cutoff if same year)
   const qolData = await db
     .select({
       month: qolExpenses.month,
@@ -765,18 +740,24 @@ export async function getAnnualQolHistory(userId: number, year: number) {
       total: sql<string>`COALESCE(SUM(${qolExpenses.amount}), 0)`,
     })
     .from(qolExpenses)
-    .where(and(eq(qolExpenses.userId, userId), eq(qolExpenses.year, year)))
+    .where(and(
+      eq(qolExpenses.userId, userId),
+      eq(qolExpenses.year, year),
+      ...(year === DATA_CUTOFF_YEAR ? [sql`${qolExpenses.month} >= ${DATA_CUTOFF_MONTH}`] : [])
+    ))
     .groupBy(qolExpenses.month, qolExpenses.category);
 
-  // Pluggy transactions (debit, variable categories only)
-  const startDate = new Date(year, 0, 1);
+  // Pluggy transactions (debit, variable categories only, excluding linked transactions)
+  // Use cutoff month as start if same year
+  const startDate = year === DATA_CUTOFF_YEAR ? new Date(year, DATA_CUTOFF_MONTH - 1, 1) : new Date(year, 0, 1);
   const endDate = new Date(year, 11, 31, 23, 59, 59);
   const pluggyData: { month: number; category: string; total: string }[] = await db.execute(
     sql`SELECT MONTH(transactionDate) as month, category, COALESCE(SUM(amount), 0) as total
         FROM pluggy_transactions
         WHERE userId = ${userId} AND type = 'debit'
           AND transactionDate >= ${startDate} AND transactionDate <= ${endDate}
-          AND category NOT IN ('receita', 'fixo', 'investimento', 'nao_categorizado')
+          AND category NOT IN ('receita', 'receita_contabilizada', 'fixo', 'investimento', 'nao_categorizado')
+          AND linkedExpenseType IS NULL
         GROUP BY MONTH(transactionDate), category`
   ) as any;
 
@@ -798,39 +779,6 @@ export async function getAnnualQolHistory(userId: number, year: number) {
   return Array.from(merged.values());
 }
 
-// ─── Category Rules (Learned AI) ──────────────────────────────────────────
-
-export async function getCategoryRules(userId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(categoryRules).where(eq(categoryRules.userId, userId)).orderBy(desc(categoryRules.confidence));
-}
-
-export async function upsertCategoryRule(userId: number, pattern: string, category: string, source: "user_correction" | "manual" = "user_correction") {
-  const db = await getDb();
-  if (!db) return null;
-  // Check if a rule with this pattern already exists for this user
-  const existing = await db.select().from(categoryRules)
-    .where(and(eq(categoryRules.userId, userId), eq(categoryRules.pattern, pattern)))
-    .limit(1);
-  if (existing.length > 0) {
-    // Update the category and increment confidence
-    await db.update(categoryRules)
-      .set({ category: category as any, confidence: sql`${categoryRules.confidence} + 1` })
-      .where(eq(categoryRules.id, existing[0].id));
-    return existing[0].id;
-  } else {
-    // Insert new rule
-    const result = await db.insert(categoryRules).values({ userId, pattern, category: category as any, source });
-    return result[0].insertId;
-  }
-}
-
-export async function deleteCategoryRule(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) return;
-  await db.delete(categoryRules).where(and(eq(categoryRules.id, id), eq(categoryRules.userId, userId)));
-}
 
 // ─── Monthly Insights ────────────────────────────────────────────────────────
 
@@ -1411,6 +1359,14 @@ export async function getCategoryTransactions(userId: number, year: number, mont
       date: "",
     });
   }
+
+  // Sort by date descending (items without date go to end)
+  results.sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return b.date.localeCompare(a.date);
+  });
 
   return results;
 }

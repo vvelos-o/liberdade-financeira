@@ -244,18 +244,6 @@ export const pluggyRouter = router({
   })),
 
 
-
-  // Save correction: updates the transaction category
-  correctCategory: protectedProcedure
-    .input(z.object({
-      transactionId: z.number(),
-      category: z.enum(["lazer", "alimentacao", "transporte", "saude", "pessoal", "imprevistos", "outros", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"]),
-      description: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      await db.updatePluggyTransactionCategory(input.transactionId, ctx.user.id, input.category);
-      return { success: true };
-    }),
 });
 
 // ─── Webhook Handler (Express route, not tRPC) ────────────────────────────────

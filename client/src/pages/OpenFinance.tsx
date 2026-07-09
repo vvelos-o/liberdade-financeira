@@ -19,9 +19,12 @@ const CATEGORIES = [
   { value: "alimentacao", label: "Alimentação", color: "text-orange-400 bg-orange-400/10" },
   { value: "transporte", label: "Transporte", color: "text-blue-400 bg-blue-400/10" },
   { value: "saude", label: "Saúde", color: "text-green-400 bg-green-400/10" },
+  { value: "pessoal", label: "Pessoal", color: "text-pink-400 bg-pink-400/10" },
+  { value: "imprevistos", label: "Imprevistos", color: "text-red-400 bg-red-400/10" },
   { value: "fixo", label: "Fixo", color: "text-yellow-400 bg-yellow-400/10" },
   { value: "investimento", label: "Investimento", color: "text-teal-400 bg-teal-400/10" },
   { value: "receita", label: "Receita", color: "text-emerald-400 bg-emerald-400/10" },
+  { value: "receita_contabilizada", label: "Receita Contabilizada", color: "text-emerald-300 bg-emerald-300/10" },
   { value: "outros", label: "Outros", color: "text-gray-400 bg-gray-400/10" },
   { value: "nao_categorizado", label: "Não categorizado", color: "text-muted-foreground bg-secondary" },
 ] as const;
@@ -66,7 +69,7 @@ export default function OpenFinance() {
     onError: () => toast.error("Configure as credenciais Pluggy primeiro"),
   });
 
-  const correctCategoryMutation = trpc.pluggy.correctCategory.useMutation({
+  const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation({
     onSuccess: () => {
       utils.pluggy.getTransactions.invalidate();
       utils.dashboard.getFunnel.invalidate();
@@ -285,10 +288,9 @@ export default function OpenFinance() {
                         <Select
                           value={tx.category ?? "nao_categorizado"}
                           onValueChange={(val) => {
-                            correctCategoryMutation.mutate({
-                              transactionId: tx.id,
-                              category: val as CategoryValue,
-                              description: tx.description ?? "",
+                            updateCategoryMutation.mutate({
+                              id: tx.id,
+                              category: val as any,
                             });
                           }}
                         >
@@ -328,7 +330,7 @@ export default function OpenFinance() {
                   Transações são importadas automaticamente quando detectadas pelo Pluggy. Configure o webhook no painel Pluggy apontando para:
                 </p>
                 <code className="text-xs bg-secondary px-2 py-1 rounded mt-1 block font-mono text-primary">
-                  {window.location.origin}/api/pluggy/webhook
+                  {window.location.origin}/api/webhooks/pluggy
                 </code>
               </div>
             </div>
