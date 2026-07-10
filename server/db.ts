@@ -597,9 +597,20 @@ export async function updatePluggyTransactionCategory(
   }
 }
 
+export async function flipPluggyTransactionType(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const [tx] = await db.select({ type: pluggyTransactions.type })
+    .from(pluggyTransactions)
+    .where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+  if (!tx) return;
+  const newType = tx.type === "debit" ? "credit" : "debit";
+  await db.update(pluggyTransactions).set({ type: newType })
+    .where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+  return { newType };
+}
 
-
-// ─── Dashboard Aggregation ────────────────────────────────────────────────────
+// ─── Dashboard Aggregation ────────────────────────────────────────────────────────────────────────────
 
 export async function getDashboardSummary(userId: number, year: number, month: number) {
   // Ignore data before the cutoff date

@@ -238,6 +238,13 @@ export const pluggyRouter = router({
       db.deletePluggyConnection(input.pluggyItemId, ctx.user.id)
     ),
 
+  // Flip transaction type (debit↔credit)
+  flipType: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(({ ctx, input }) =>
+      db.flipPluggyTransactionType(input.id, ctx.user.id)
+    ),
+
   // Check if credentials are configured
   getStatus: protectedProcedure.query(() => ({
     configured: !!(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET),

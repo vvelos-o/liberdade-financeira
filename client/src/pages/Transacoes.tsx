@@ -3,7 +3,7 @@ import { useMonth } from "@/contexts/MonthContext";
 import { MoneyDisplay, formatMoney } from "@/components/finance/MoneyDisplay";
 import { CategoryBadge, CATEGORY_LABELS, VARIABLE_CATEGORIES, type FinanceCategory } from "@/components/finance/CategoryBadge";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Filter, Package, Calendar, Check, Link2, Unlink } from "lucide-react";
+import { RefreshCw, Filter, Package, Calendar, Check, Link2, Unlink, ArrowUpDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +14,13 @@ import { toast } from "sonner";
 
 // ─── Transaction Item ────────────────────────────────────────────────────────
 
-function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned, onLinkToInstallment, fixedExpenses, plannedExpenses, installmentMonths, allInstallments }: {
+function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned, onLinkToInstallment, onFlipType, fixedExpenses, plannedExpenses, installmentMonths, allInstallments }: {
   tx: any;
   onCategoryChange: (id: number, category: string) => void;
   onLinkToFixed: (id: number, fixedExpenseId: number) => void;
   onLinkToPlanned: (id: number, plannedExpenseId: number) => void;
   onLinkToInstallment: (id: number, installmentMonthId: number) => void;
+  onFlipType: (id: number) => void;
   fixedExpenses: any[] | undefined;
   plannedExpenses: any[] | undefined;
   installmentMonths: any[] | undefined;
@@ -167,7 +168,14 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned,
           )}
         </div>
       </div>
-      <div className="text-right flex-shrink-0">
+      <div className="text-right flex-shrink-0 flex items-center gap-1">
+        <button
+          onClick={() => onFlipType(tx.id)}
+          className="p-1 rounded hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
+          title="Inverter tipo (débito↔crédito)"
+        >
+          <ArrowUpDown className="h-3 w-3" />
+        </button>
         <span className={cn(
           "font-money text-sm font-semibold",
           tx.category === "receita_contabilizada" ? "text-muted-foreground" :
@@ -264,6 +272,7 @@ export default function Transacoes() {
   const { data: allInstallments } = trpc.installments.getAll.useQuery();
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
   const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation();
+  const flipTypeMutation = trpc.pluggy.flipType.useMutation();
   const utils = trpc.useUtils();
 
 
@@ -390,6 +399,29 @@ export default function Transacoes() {
     });
   };
 
+  const handleFlipType = (id: number) => {
+    const tx = filteredTransactions.find((t: any) => t.id === id);
+    if (!tx) return;
+    const newType = tx.type === "debit" ? "credit" : "debit";
+    // Optimistic update
+    const queryKey = { year, month };
+    utils.pluggy.getTransactions.setData(queryKey, (old: any) => {
+      if (!old) return old;
+      return old.map((t: any) => t.id === id ? { ...t, type: newType } : t);
+    });
+    flipTypeMutation.mutate({ id }, {
+      onSuccess: () => {
+        toast.success(`Tipo alterado para ${newType === "credit" ? "crédito (+)" : "débito (-)"}.`);
+        utils.dashboard.getFunnel.invalidate();
+      },
+      onError: () => {
+        toast.error("Erro ao inverter tipo. Tente novamente.");
+        utils.pluggy.getTransactions.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+      },
+    });
+  };
+
   return (
     <div className="p-4 pb-6 space-y-4 max-w-lg mx-auto">
       {/* Action Bar */}
@@ -472,6 +504,7 @@ export default function Transacoes() {
                   onLinkToFixed={handleLinkToFixed}
                   onLinkToPlanned={handleLinkToPlanned}
                   onLinkToInstallment={handleLinkToInstallment}
+                  onFlipType={handleFlipType}
                   fixedExpenses={fixedExpenses}
                   plannedExpenses={plannedExpenses}
                   installmentMonths={installmentMonths}
