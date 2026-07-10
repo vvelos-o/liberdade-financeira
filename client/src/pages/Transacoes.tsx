@@ -263,7 +263,6 @@ export default function Transacoes() {
   const { data: installmentMonths } = trpc.installments.getMonthsForPeriod.useQuery({ year, month });
   const { data: allInstallments } = trpc.installments.getAll.useQuery();
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
-  const correctMutation = trpc.pluggy.correctCategory.useMutation();
   const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation();
   const utils = trpc.useUtils();
 
@@ -296,16 +295,17 @@ export default function Transacoes() {
       if (!old) return old;
       return old.map((t: any) => t.id === id ? { ...t, category, isReviewed: true, linkedExpenseId: null, linkedExpenseType: null } : t);
     });
-    correctMutation.mutate({ transactionId: id, category: category as any, description: tx.description ?? "" }, {
+    updateCategoryMutation.mutate({ id, category: category as any, linkedExpenseId: null, linkedExpenseType: null }, {
       onSuccess: () => {
         toast.success("Categoria atualizada.");
         utils.dashboard.getFunnel.invalidate();
       },
-      onError: (err) => {
-        console.error("correctCategory error:", err);
+      onError: (err: any) => {
+        console.error("updateCategory error:", err);
         toast.error("Erro ao redefinir categoria. Tente novamente.");
         // Rollback optimistic update
         utils.pluggy.getTransactions.invalidate();
+        utils.dashboard.getFunnel.invalidate();
       },
     });
   };
@@ -332,6 +332,7 @@ export default function Transacoes() {
         console.error("linkToFixed error:", err);
         toast.error("Erro ao vincular. Tente novamente.");
         utils.pluggy.getTransactions.invalidate();
+        utils.dashboard.getFunnel.invalidate();
       },
     });
   };
@@ -357,6 +358,7 @@ export default function Transacoes() {
         console.error("linkToPlanned error:", err);
         toast.error("Erro ao vincular. Tente novamente.");
         utils.pluggy.getTransactions.invalidate();
+        utils.dashboard.getFunnel.invalidate();
       },
     });
   };
@@ -383,6 +385,7 @@ export default function Transacoes() {
         console.error("linkToInstallment error:", err);
         toast.error("Erro ao vincular. Tente novamente.");
         utils.pluggy.getTransactions.invalidate();
+        utils.dashboard.getFunnel.invalidate();
       },
     });
   };

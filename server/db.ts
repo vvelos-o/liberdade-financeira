@@ -551,12 +551,20 @@ export async function updatePluggyTransactionCategory(
   if (!db) return;
 
   // Read old linked state BEFORE the update (needed for unlink → mark as unpaid)
-  const [oldTx] = await db.select({
-    linkedExpenseId: pluggyTransactions.linkedExpenseId,
-    linkedExpenseType: pluggyTransactions.linkedExpenseType,
-  }).from(pluggyTransactions).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+  let oldLinkedId: number | null = null;
+  let oldLinkedType: string | null = null;
+  try {
+    const [oldTx] = await db.select({
+      linkedExpenseId: pluggyTransactions.linkedExpenseId,
+      linkedExpenseType: pluggyTransactions.linkedExpenseType,
+    }).from(pluggyTransactions).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
+    oldLinkedId = oldTx?.linkedExpenseId ?? null;
+    oldLinkedType = oldTx?.linkedExpenseType ?? null;
+  } catch (e) {
+    console.error("[updateCategory] Failed to read old linked state:", e);
+  }
 
-  // Perform the category/link update
+  // Perform the core category/link update (MUST succeed)
   await db.update(pluggyTransactions).set({
     category,
     isReviewed: true,
@@ -564,26 +572,28 @@ export async function updatePluggyTransactionCategory(
     linkedExpenseType: linkedExpenseType ?? null,
   }).where(and(eq(pluggyTransactions.id, id), eq(pluggyTransactions.userId, userId)));
 
-  // If previously linked to planned/installment and now unlinking → mark as unpaid
-  const oldLinkedId = oldTx?.linkedExpenseId;
-  const oldLinkedType = oldTx?.linkedExpenseType;
-  if (oldLinkedId && !linkedExpenseId) {
-    if (oldLinkedType === "planned") {
-      await db.update(plannedExpenses).set({ isPaid: false })
-        .where(and(eq(plannedExpenses.id, oldLinkedId), eq(plannedExpenses.userId, userId)));
-    } else if (oldLinkedType === "installment") {
-      await db.update(installmentExpenseMonths).set({ isPaid: false })
-        .where(and(eq(installmentExpenseMonths.id, oldLinkedId), eq(installmentExpenseMonths.userId, userId)));
+  // Best-effort: auto-mark planned/installment as paid/unpaid
+  try {
+    // If previously linked to planned/installment and now unlinking → mark as unpaid
+    if (oldLinkedId && !linkedExpenseId) {
+      if (oldLinkedType === "planned") {
+        await db.update(plannedExpenses).set({ isPaid: false })
+          .where(and(eq(plannedExpenses.id, oldLinkedId), eq(plannedExpenses.userId, userId)));
+      } else if (oldLinkedType === "installment") {
+        await db.update(installmentExpenseMonths).set({ isPaid: false })
+          .where(and(eq(installmentExpenseMonths.id, oldLinkedId), eq(installmentExpenseMonths.userId, userId)));
+      }
     }
-  }
-
-  // Auto-mark planned expense or installment month as paid when linked
-  if (linkedExpenseId && linkedExpenseType === "planned") {
-    await db.update(plannedExpenses).set({ isPaid: true })
-      .where(and(eq(plannedExpenses.id, linkedExpenseId), eq(plannedExpenses.userId, userId)));
-  } else if (linkedExpenseId && linkedExpenseType === "installment") {
-    await db.update(installmentExpenseMonths).set({ isPaid: true })
-      .where(and(eq(installmentExpenseMonths.id, linkedExpenseId), eq(installmentExpenseMonths.userId, userId)));
+    // Auto-mark planned expense or installment month as paid when linked
+    if (linkedExpenseId && linkedExpenseType === "planned") {
+      await db.update(plannedExpenses).set({ isPaid: true })
+        .where(and(eq(plannedExpenses.id, linkedExpenseId), eq(plannedExpenses.userId, userId)));
+    } else if (linkedExpenseId && linkedExpenseType === "installment") {
+      await db.update(installmentExpenseMonths).set({ isPaid: true })
+        .where(and(eq(installmentExpenseMonths.id, linkedExpenseId), eq(installmentExpenseMonths.userId, userId)));
+    }
+  } catch (e) {
+    console.error("[updateCategory] Failed to update isPaid status:", e);
   }
 }
 
