@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 // ─── Funnel Summary ──────────────────────────────────────────────────────────
 
-function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
+function FunnelSummary({ data, isLoading, totalSpent }: { data: any; isLoading: boolean; totalSpent: number }) {
   const [expanded, setExpanded] = useState(false);
 
   if (isLoading) {
@@ -36,7 +36,7 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
       <CardContent className="p-4">
         {/* Main display */}
         <div className="flex items-baseline justify-between mb-2">
-          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Disponível variável</span>
+          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Disponível restante</span>
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
@@ -45,7 +45,12 @@ function FunnelSummary({ data, isLoading }: { data: any; isLoading: boolean }) {
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         </div>
-        <MoneyDisplay value={disponivel} size="3xl" className="block mb-1" />
+        <MoneyDisplay value={disponivel - totalSpent} size="3xl" className="block mb-1" />
+        {totalSpent > 0 && (
+          <p className="text-[10px] text-muted-foreground">
+            Orçamento: {formatMoney(disponivel)} − Gasto: {formatMoney(totalSpent)}
+          </p>
+        )}
 
         {/* Funnel breakdown (collapsible) */}
         {expanded && (
@@ -264,11 +269,12 @@ function CategoryBar({ category, budget, spent, index }: {
             <span className="font-money text-[10px] text-muted-foreground">
               {formatMoney(budget)}
             </span>
+            <span className="text-[10px] text-muted-foreground mx-0.5">|</span>
             <span className={cn(
-              "font-money text-[10px] font-medium ml-0.5",
-              isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground/70"
+              "font-money text-[10px] font-medium",
+              isOverBudget ? "text-destructive" : remaining > 0 ? "text-positive" : "text-muted-foreground"
             )}>
-              ({Math.round(percentage)}%)
+              {isOverBudget ? `-${formatMoney(Math.abs(remaining))}` : `${formatMoney(remaining)}`}
             </span>
           </div>
         </div>
@@ -436,7 +442,7 @@ export default function Inicio() {
   return (
     <div className="p-4 pb-6 space-y-4 max-w-lg mx-auto">
       {/* Funnel Summary */}
-      <FunnelSummary data={funnel} isLoading={isLoading} />
+      <FunnelSummary data={funnel} isLoading={isLoading} totalSpent={totalSpent} />
 
       {/* Month-End Card (shows last 3 days or past month) */}
       <MonthEndCard funnel={funnel} />
