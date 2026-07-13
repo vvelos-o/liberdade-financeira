@@ -43,7 +43,7 @@ function createUnauthContext(): { ctx: TrpcContext } {
   return { ctx };
 }
 
-describe("Finance Master - Backend Procedures", () => {
+describe("Sobra - Backend Procedures", () => {
   const { ctx } = createAuthContext();
   const caller = appRouter.createCaller(ctx);
 
@@ -201,7 +201,7 @@ describe("Finance Master - Backend Procedures", () => {
       expect(Array.isArray(result)).toBe(true);
     });
 
-    it("correctCategory updates category", async () => {
+    it("updateCategory updates category", async () => {
       // First insert a test transaction directly via db
       const db = await import("./db");
       await db.upsertPluggyTransaction(1, {
@@ -219,13 +219,11 @@ describe("Finance Master - Backend Procedures", () => {
       expect(testTx).toBeDefined();
       expect(testTx.category).toBe("nao_categorizado");
 
-      // Now correct the category
-      const result = await caller.pluggy.correctCategory({
-        transactionId: testTx.id,
+      // Now update the category
+      await caller.pluggy.updateCategory({
+        id: testTx.id,
         category: "transporte",
-        description: "UBER TRIP DOWNTOWN",
       });
-      expect(result.success).toBe(true);
 
       // Verify the transaction was updated
       const txsAfter = await caller.pluggy.getTransactions({ year: 2026, month: 7 });

@@ -33,7 +33,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const { year, month, setYearMonth } = useMonth();
 
+  // Data starts from July 2026 - block navigation before that
+  const DATA_START_YEAR = 2026;
+  const DATA_START_MONTH = 7;
+  const canGoPrev = year > DATA_START_YEAR || (year === DATA_START_YEAR && month > DATA_START_MONTH);
+
   const prevMonth = () => {
+    if (!canGoPrev) return;
     if (month === 1) setYearMonth(year - 1, 12);
     else setYearMonth(year, month - 1);
   };
@@ -49,7 +55,13 @@ export function AppLayout({ children }: AppLayoutProps) {
         <div className="flex items-center gap-1">
           <button
             onClick={prevMonth}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors active:scale-95"
+            disabled={!canGoPrev}
+            className={cn(
+              "p-2 rounded-lg transition-colors active:scale-95",
+              canGoPrev
+                ? "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                : "text-muted-foreground/30 cursor-not-allowed"
+            )}
             aria-label="Mês anterior"
           >
             <ChevronLeft className="h-4 w-4" />

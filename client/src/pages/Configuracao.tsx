@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useMonth } from "@/contexts/MonthContext";
 import { formatMoney } from "@/components/finance/MoneyDisplay";
 import { CATEGORY_LABELS, VARIABLE_CATEGORIES, CATEGORY_COLORS } from "@/components/finance/CategoryBadge";
+import { DEFAULT_CATEGORY_PERCENTAGES } from "@shared/categories";
 import { cn } from "@/lib/utils";
 import {
   DollarSign, Home, Target, Percent, Link2, Plus, Trash2, Save, Edit2, Check, X, CreditCard, Copy,
@@ -426,12 +427,12 @@ function CategoryPercentagesSection() {
     if (settings) {
       const parsed = settings.categoryPercentages
         ? (typeof settings.categoryPercentages === "string" ? JSON.parse(settings.categoryPercentages) : settings.categoryPercentages)
-        : { lazer: 28, alimentacao: 28, saude: 18, transporte: 8, pessoal: 10, imprevistos: 8 };
+        : { ...DEFAULT_CATEGORY_PERCENTAGES };
       setPercentages(parsed);
       setInvestmentTarget(settings.investmentTarget ?? "0");
     } else {
       // Default values when no settings exist yet
-      setPercentages({ lazer: 28, alimentacao: 28, saude: 18, transporte: 8, pessoal: 10, imprevistos: 8 });
+      setPercentages({ ...DEFAULT_CATEGORY_PERCENTAGES });
       setInvestmentTarget("0");
     }
   }, [settings]);

@@ -80,7 +80,7 @@ export default function Login({ onSuccess }: LoginProps) {
             transition={{ delay: 0.2, duration: 0.4 }}
           >
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
-              Finance Master
+              Sobra
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Gestão financeira pessoal

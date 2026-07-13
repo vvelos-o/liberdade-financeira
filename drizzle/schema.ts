@@ -11,11 +11,12 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
+import { VARIABLE_CATEGORIES, FULL_CATEGORIES, DEFAULT_CATEGORY_PERCENTAGES } from "../shared/categories";
 
-// ─── Category Enums (shared) ─────────────────────────────────────────────────
+// ─── Category Enums (from shared/categories.ts) ───────────────────────────────────
 
-const variableCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos"] as const;
-const fullCategoryEnum = ["lazer", "alimentacao", "transporte", "saude", "outros", "pessoal", "imprevistos", "receita", "receita_contabilizada", "fixo", "investimento", "nao_categorizado"] as const;
+const variableCategoryEnum = VARIABLE_CATEGORIES;
+const fullCategoryEnum = FULL_CATEGORIES;
 
 // ─── Core Auth ────────────────────────────────────────────────────────────────
 
@@ -311,14 +312,4 @@ export type PluggyTransaction = typeof pluggyTransactions.$inferSelect;
 
 // ─── Shared Constants ────────────────────────────────────────────────────────
 
-export const VARIABLE_CATEGORIES = variableCategoryEnum;
-export const FULL_CATEGORIES = fullCategoryEnum;
-
-export const DEFAULT_CATEGORY_PERCENTAGES: Record<string, number> = {
-  lazer: 28,
-  alimentacao: 28,
-  saude: 18,
-  transporte: 8,
-  pessoal: 10,
-  imprevistos: 8,
-};
+export { VARIABLE_CATEGORIES, FULL_CATEGORIES, DEFAULT_CATEGORY_PERCENTAGES } from "../shared/categories";

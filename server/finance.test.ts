@@ -58,21 +58,21 @@ vi.mock("./db", async () => {
     updateFinancialGoal: vi.fn().mockResolvedValue({ id: 1 }),
     deleteFinancialGoal: vi.fn().mockResolvedValue(undefined),
     // Dashboard
-    getDashboardSummary: vi.fn().mockResolvedValue({
-      totalIncome: "5000",
-      totalExpenses: "3500",
-      fixedExpenses: "2000",
-      qolExpenses: "1000",
-      installmentExpenses: "300",
-      plannedExpenses: "200",
-      balance: "1500",
-      qolByCategory: { lazer: "400", alimentacao: "300", transporte: "200", saude: "100", outros: "0" },
+    getDashboardFunnel: vi.fn().mockResolvedValue({
+      totalIncome: 8600,
+      totalFixed: 3000,
+      investmentTarget: 1000,
+      compromissos: 500,
+      disponivel: 4100,
+      totalVariableSpent: 1200,
+      categoryBudgets: [
+        { category: "lazer", budget: 1025, spent: 300 },
+        { category: "alimentacao", budget: 1025, spent: 400 },
+      ],
     }),
+    getCategoryTransactions: vi.fn().mockResolvedValue([]),
     // Annual
     getAnnualQolHistory: vi.fn().mockResolvedValue([]),
-    getFixedExpenseEntriesForYear: vi.fn().mockResolvedValue([]),
-    getInstallmentMonthsForYear: vi.fn().mockResolvedValue([]),
-    getPlannedExpensesForYear: vi.fn().mockResolvedValue([]),
     // Pluggy
     getPluggyConnections: vi.fn().mockResolvedValue([]),
     upsertPluggyConnection: vi.fn().mockResolvedValue(undefined),
@@ -128,15 +128,14 @@ describe("auth", () => {
 
 // ─── Dashboard Tests ───────────────────────────────────────────────────────────
 describe("dashboard", () => {
-  it("returns summary with all financial fields", async () => {
+  it("returns funnel with all financial fields", async () => {
     const ctx = createTestContext();
     const caller = appRouter.createCaller(ctx);
-    const summary = await caller.dashboard.getSummary({ year: 2026, month: 6 });
-    expect(summary).toBeDefined();
-    expect(summary).toHaveProperty("totalIncome");
-    expect(summary).toHaveProperty("totalExpenses");
-    expect(summary).toHaveProperty("balance");
-    expect(summary).toHaveProperty("qolByCategory");
+    const funnel = await caller.dashboard.getFunnel({ year: 2026, month: 7 });
+    expect(funnel).toBeDefined();
+    expect(funnel).toHaveProperty("totalIncome");
+    expect(funnel).toHaveProperty("disponivel");
+    expect(funnel).toHaveProperty("categoryBudgets");
   });
 
   it("returns budget settings with default values", async () => {
