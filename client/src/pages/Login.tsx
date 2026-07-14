@@ -72,7 +72,7 @@ export default function Login({ onSuccess }: LoginProps) {
             transition={{ delay: 0.1, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
             className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4"
           >
-            <img src="/sobra-logo.webp" alt="Sobra" className="w-10 h-10" />
+            <img src="/sobra-logo.svg" alt="Sobra" className="h-10 w-auto" />
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 8 }}
