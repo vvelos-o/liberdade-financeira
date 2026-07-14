@@ -50,8 +50,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
-      {/* Top Header - Month Selector */}
-      <header className="flex items-center justify-center px-4 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top">
+      {/* Top Header - Logo + Month Selector */}
+      <header className="flex items-center justify-between px-4 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top">
+        {/* Logo + Wordmark */}
+        <div className="flex items-center gap-2">
+          <img src="/manus-storage/sobra-logo_f6e9c7fc.webp" alt="Sobra" className="h-7 w-7" />
+          <span className="text-sm font-medium tracking-[-0.5px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>sobra</span>
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={prevMonth}
@@ -77,6 +82,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
+        {/* Spacer for balance */}
+        <div className="w-[88px]"></div>
       </header>
 
       {/* Page Content */}
