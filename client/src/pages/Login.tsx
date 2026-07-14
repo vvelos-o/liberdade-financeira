@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -72,14 +72,14 @@ export default function Login({ onSuccess }: LoginProps) {
             transition={{ delay: 0.1, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
             className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4"
           >
-            <TrendingUp className="w-8 h-8 text-primary" />
+            <span className="text-2xl font-extrabold font-display text-primary tracking-tighter">S</span>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.4 }}
           >
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">
+            <h1 className="text-2xl font-extrabold font-display text-foreground tracking-tight">
               Sobra
             </h1>
             <p className="text-sm text-muted-foreground mt-1">

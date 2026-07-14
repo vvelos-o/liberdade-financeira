@@ -36,7 +36,7 @@ function FunnelSummary({ data, isLoading, totalSpent }: { data: any; isLoading: 
       <CardContent className="p-4">
         {/* Main display */}
         <div className="flex items-baseline justify-between mb-2">
-          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Disponível restante</span>
+          <span className="text-xs text-muted-foreground font-medium font-display uppercase tracking-wider">Disponível restante</span>
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
@@ -45,7 +45,7 @@ function FunnelSummary({ data, isLoading, totalSpent }: { data: any; isLoading: 
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         </div>
-        <MoneyDisplay value={disponivel - totalSpent} size="3xl" className="block mb-1" />
+        <MoneyDisplay value={disponivel - totalSpent} size="3xl" className="block mb-1 animate-money-reveal" />
         {totalSpent > 0 && (
           <p className="text-[10px] text-muted-foreground">
             Orçamento: {formatMoney(disponivel)} − Gasto: {formatMoney(totalSpent)}

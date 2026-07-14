@@ -51,7 +51,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
       {/* Top Header - Month Selector */}
-      <header className="flex items-center justify-center px-4 h-12 border-b border-border bg-card/60 backdrop-blur-md flex-shrink-0 safe-top">
+      <header className="flex items-center justify-center px-4 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top">
         <div className="flex items-center gap-1">
           <button
             onClick={prevMonth}
@@ -66,7 +66,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-semibold text-foreground px-3 min-w-[150px] text-center select-none">
+          <span className="text-sm font-semibold font-display text-foreground px-3 min-w-[150px] text-center select-none">
             {MONTH_NAMES_FULL[month - 1]} {year}
           </span>
           <button
@@ -85,7 +85,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="flex items-center justify-around border-t border-border bg-card/80 backdrop-blur-md flex-shrink-0 safe-bottom h-16" role="navigation" aria-label="Navegação principal">
+      <nav className="flex items-center justify-around border-t border-border bg-card/80 backdrop-blur-md flex-shrink-0 h-16 pb-[env(safe-area-inset-bottom,0px)]" role="navigation" aria-label="Navegação principal">
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === "/"
             ? location === "/"
