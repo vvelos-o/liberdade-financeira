@@ -81,7 +81,7 @@ export async function getMonthlyInsight(userId: number, year: number, month: num
 
 export async function generateMonthlyInsight(userId: number, year: number, month: number) {
   const currentFunnel = await getDashboardFunnel(userId, year, month);
-  if (!currentFunnel) return null;
+  if (!currentFunnel) throw new Error("Sem dados financeiros para gerar insight neste mês.");
 
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
@@ -123,10 +123,10 @@ Regras:
 
     const rawContent = response.choices?.[0]?.message?.content;
     const content = typeof rawContent === "string" ? rawContent : "";
-    if (!content) return null;
+    if (!content) throw new Error("LLM retornou resposta vazia. Verifique a configuração da OPENAI_API_KEY.");
 
     const db = await getDb();
-    if (!db) return null;
+    if (!db) throw new Error("Erro de conexão com o banco de dados.");
 
     await db
       .insert(monthlyInsights)
@@ -134,9 +134,9 @@ Regras:
       .onDuplicateKeyUpdate({ set: { content, isDismissed: false } });
 
     return { content, isDismissed: false };
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Insights] Failed to generate:", error);
-    return null;
+    throw new Error(error?.message || "Falha ao gerar insight. Verifique se a OPENAI_API_KEY está configurada no Railway.");
   }
 }
 

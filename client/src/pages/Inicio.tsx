@@ -122,7 +122,7 @@ function InsightCard({ year, month }: { year: number; month: number }) {
             onClick={() => {
               generateMutation.mutate({ year, month }, {
                 onSuccess: () => utils.insights.get.invalidate({ year, month }),
-                onError: () => toast.error("Não foi possível gerar o insight."),
+                onError: (err) => toast.error(err?.message || "Não foi possível gerar o insight."),
               });
             }}
             disabled={generateMutation.isPending}

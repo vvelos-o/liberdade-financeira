@@ -54,7 +54,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <header className="flex items-center justify-between px-4 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top">
         {/* Logo + Wordmark */}
         <div className="flex items-center gap-2">
-          <img src="/manus-storage/sobra-logo_f6e9c7fc.webp" alt="Sobra" className="h-7 w-7" />
+          <img src="/sobra-logo.webp" alt="Sobra" className="h-7 w-7" />
           <span className="text-sm font-medium tracking-[-0.5px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>sobra</span>
         </div>
         <div className="flex items-center gap-1">
