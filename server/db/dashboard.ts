@@ -79,6 +79,111 @@ export async function getMonthlyInsight(userId: number, year: number, month: num
   return result[0] ?? null;
 }
 
+// ─── Deterministic Insight Generator (fallback) ─────────────────────────────
+
+const CATEGORY_LABELS_MAP: Record<string, string> = {
+  lazer: "Lazer",
+  alimentacao: "Alimentação",
+  transporte: "Transporte",
+  saude: "Saúde",
+  pessoal: "Pessoal",
+  imprevistos: "Imprevistos",
+  outros: "Outros",
+};
+
+function generateDeterministicInsight(
+  currentFunnel: NonNullable<Awaited<ReturnType<typeof getDashboardFunnel>>>,
+  prevFunnel: Awaited<ReturnType<typeof getDashboardFunnel>>,
+  year: number,
+  month: number
+): string {
+  const insights: string[] = [];
+  const now = new Date();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const currentDay = year === now.getFullYear() && month === now.getMonth() + 1 ? now.getDate() : daysInMonth;
+  const monthProgress = currentDay / daysInMonth;
+
+  // 1. Categories over budget
+  const overBudget = currentFunnel.categories
+    .filter(c => c.budget > 0 && c.spent > c.budget)
+    .sort((a, b) => (b.spent - b.budget) - (a.spent - a.budget));
+
+  if (overBudget.length > 0) {
+    const worst = overBudget[0];
+    const overBy = worst.spent - worst.budget;
+    const label = CATEGORY_LABELS_MAP[worst.category] || worst.category;
+    insights.push(`${label} estourou o orçamento em R$ ${overBy.toFixed(0)} (${Math.round((worst.spent / worst.budget) * 100)}% do limite). Tente segurar os gastos nessa categoria até o fim do mês.`);
+  }
+
+  // 2. Categories on pace to exceed budget
+  if (insights.length === 0) {
+    const atRisk = currentFunnel.categories
+      .filter(c => c.budget > 0 && c.spent <= c.budget && monthProgress > 0)
+      .filter(c => {
+        const projectedSpend = c.spent / monthProgress;
+        return projectedSpend > c.budget * 1.15; // projected to exceed by 15%+
+      })
+      .sort((a, b) => {
+        const projA = a.spent / monthProgress;
+        const projB = b.spent / monthProgress;
+        return (projB / b.budget) - (projA / a.budget);
+      });
+
+    if (atRisk.length > 0) {
+      const worst = atRisk[0];
+      const projected = worst.spent / monthProgress;
+      const label = CATEGORY_LABELS_MAP[worst.category] || worst.category;
+      insights.push(`Nesse ritmo, ${label} vai fechar em ~R$ ${projected.toFixed(0)} (orçamento: R$ ${worst.budget.toFixed(0)}). Considere reduzir gastos nos próximos ${daysInMonth - currentDay} dias.`);
+    }
+  }
+
+  // 3. Comparison with previous month
+  if (prevFunnel && insights.length === 0) {
+    const improvements = currentFunnel.categories
+      .map(c => {
+        const prev = prevFunnel.categories.find(p => p.category === c.category);
+        if (!prev || prev.spent === 0) return null;
+        const diff = ((c.spent - prev.spent) / prev.spent) * 100;
+        return { ...c, diff, prevSpent: prev.spent };
+      })
+      .filter(Boolean) as Array<{ category: string; spent: number; diff: number; prevSpent: number }>;
+
+    const bigDrop = improvements.filter(c => c.diff < -20).sort((a, b) => a.diff - b.diff);
+    const bigRise = improvements.filter(c => c.diff > 30).sort((a, b) => b.diff - a.diff);
+
+    if (bigDrop.length > 0) {
+      const best = bigDrop[0];
+      const label = CATEGORY_LABELS_MAP[best.category] || best.category;
+      insights.push(`Parabéns! ${label} está ${Math.abs(best.diff).toFixed(0)}% abaixo do mês passado (R$ ${best.spent.toFixed(0)} vs R$ ${best.prevSpent.toFixed(0)}). Continue assim!`);
+    } else if (bigRise.length > 0) {
+      const worst = bigRise[0];
+      const label = CATEGORY_LABELS_MAP[worst.category] || worst.category;
+      insights.push(`${label} subiu ${worst.diff.toFixed(0)}% vs mês anterior (R$ ${worst.spent.toFixed(0)} vs R$ ${worst.prevSpent.toFixed(0)}). Vale revisar se há gastos que podem ser cortados.`);
+    }
+  }
+
+  // 4. Overall health
+  if (insights.length === 0) {
+    const totalSpent = currentFunnel.categories.reduce((sum, c) => sum + c.spent, 0);
+    const totalBudget = currentFunnel.disponivel;
+    if (totalBudget > 0) {
+      const usagePercent = (totalSpent / totalBudget) * 100;
+      if (usagePercent < monthProgress * 80) {
+        const remaining = totalBudget - totalSpent;
+        insights.push(`Ótimo controle! Você usou ${usagePercent.toFixed(0)}% do disponível com ${Math.round(monthProgress * 100)}% do mês passado. Ainda tem R$ ${remaining.toFixed(0)} de folga.`);
+      } else {
+        insights.push(`Você já usou ${usagePercent.toFixed(0)}% do disponível (R$ ${totalSpent.toFixed(0)} de R$ ${totalBudget.toFixed(0)}). Faltam ${daysInMonth - currentDay} dias — tente manter gastos no mínimo.`);
+      }
+    } else {
+      insights.push(`Seus gastos fixos e investimentos consomem toda a renda este mês. Revise compromissos para liberar margem.`);
+    }
+  }
+
+  return insights[0] || "Seus dados financeiros estão em dia. Continue monitorando!";
+}
+
+// ─── Generate Monthly Insight (LLM with deterministic fallback) ──────────────
+
 export async function generateMonthlyInsight(userId: number, year: number, month: number) {
   const currentFunnel = await getDashboardFunnel(userId, year, month);
   if (!currentFunnel) throw new Error("Sem dados financeiros para gerar insight neste mês.");
@@ -87,16 +192,20 @@ export async function generateMonthlyInsight(userId: number, year: number, month
   const prevYear = month === 1 ? year - 1 : year;
   const prevFunnel = await getDashboardFunnel(userId, prevYear, prevMonth);
 
-  const { invokeLLM } = await import("../_core/llm");
+  let content: string;
 
-  const categoriesStr = currentFunnel.categories
-    .filter(c => c.spent > 0)
-    .map(c => `${c.category}: R$ ${c.spent.toFixed(2)} / R$ ${c.budget.toFixed(2)} (${c.budget > 0 ? Math.round((c.spent / c.budget) * 100) : 0}%)`)
-    .join(", ");
+  // Try LLM first, fall back to deterministic
+  try {
+    const { invokeLLM } = await import("../_core/llm");
 
-  const prevSection = prevFunnel ? `\nMês anterior (${prevYear}/${prevMonth}):\n- Renda: R$ ${prevFunnel.totalIncome.toFixed(2)}\n- Gastos fixos: R$ ${prevFunnel.totalFixed.toFixed(2)}\n- Disponível: R$ ${prevFunnel.disponivel.toFixed(2)}\n- Categorias: ${prevFunnel.categories.filter(c => c.spent > 0).map(c => `${c.category}: R$ ${c.spent.toFixed(2)}`).join(", ")}` : "(Sem dados do mês anterior para comparação)";
+    const categoriesStr = currentFunnel.categories
+      .filter(c => c.spent > 0)
+      .map(c => `${c.category}: R$ ${c.spent.toFixed(2)} / R$ ${c.budget.toFixed(2)} (${c.budget > 0 ? Math.round((c.spent / c.budget) * 100) : 0}%)`)
+      .join(", ");
 
-  const prompt = `Você é um consultor financeiro pessoal. Gere UM insight curto e acionável (máximo 2 frases) para o usuário baseado nos dados abaixo.
+    const prevSection = prevFunnel ? `\nMês anterior (${prevYear}/${prevMonth}):\n- Renda: R$ ${prevFunnel.totalIncome.toFixed(2)}\n- Gastos fixos: R$ ${prevFunnel.totalFixed.toFixed(2)}\n- Disponível: R$ ${prevFunnel.disponivel.toFixed(2)}\n- Categorias: ${prevFunnel.categories.filter(c => c.spent > 0).map(c => `${c.category}: R$ ${c.spent.toFixed(2)}`).join(", ")}` : "(Sem dados do mês anterior para comparação)";
+
+    const prompt = `Você é um consultor financeiro pessoal. Gere UM insight curto e acionável (máximo 2 frases) para o usuário baseado nos dados abaixo.
 
 Mês atual (${year}/${month}):
 - Renda total: R$ ${currentFunnel.totalIncome.toFixed(2)} (Fixa: R$ ${currentFunnel.manualFixedIncome.toFixed(2)} + Extras: R$ ${currentFunnel.totalExtraIncome.toFixed(2)})
@@ -113,8 +222,8 @@ Regras:
 - Use tom amigável mas direto
 - Responda APENAS o insight, sem título ou prefixo`;
 
-  try {
     const response = await invokeLLM({
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "Você é um consultor financeiro pessoal brasileiro. Responda em português." },
         { role: "user", content: prompt },
@@ -122,22 +231,23 @@ Regras:
     });
 
     const rawContent = response.choices?.[0]?.message?.content;
-    const content = typeof rawContent === "string" ? rawContent : "";
-    if (!content) throw new Error("LLM retornou resposta vazia. Verifique a configuração da OPENAI_API_KEY.");
-
-    const db = await getDb();
-    if (!db) throw new Error("Erro de conexão com o banco de dados.");
-
-    await db
-      .insert(monthlyInsights)
-      .values({ userId, year, month, content })
-      .onDuplicateKeyUpdate({ set: { content, isDismissed: false } });
-
-    return { content, isDismissed: false };
-  } catch (error: any) {
-    console.error("[Insights] Failed to generate:", error);
-    throw new Error(error?.message || "Falha ao gerar insight. Verifique se a OPENAI_API_KEY está configurada no Railway.");
+    content = typeof rawContent === "string" ? rawContent.trim() : "";
+    if (!content) throw new Error("LLM retornou resposta vazia");
+  } catch (llmError: any) {
+    console.warn("[Insights] LLM failed, using deterministic fallback:", llmError?.message);
+    content = generateDeterministicInsight(currentFunnel, prevFunnel, year, month);
   }
+
+  // Save to DB
+  const db = await getDb();
+  if (!db) throw new Error("Erro de conexão com o banco de dados.");
+
+  await db
+    .insert(monthlyInsights)
+    .values({ userId, year, month, content })
+    .onDuplicateKeyUpdate({ set: { content, isDismissed: false } });
+
+  return { content, isDismissed: false };
 }
 
 export async function dismissMonthlyInsight(userId: number, year: number, month: number) {

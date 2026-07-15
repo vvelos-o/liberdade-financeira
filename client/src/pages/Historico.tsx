@@ -170,7 +170,6 @@ export default function Historico() {
 
   // Annual data
   const { data: qolHistory } = trpc.annual.getQolHistory.useQuery({ year });
-  const { data: incomeHistory } = trpc.annual.getIncomeHistory.useQuery({ year });
 
   // Build monthly trend data from qolHistory (shape: {month, category, total}[])
   const trendData = useMemo(() => {
@@ -186,22 +185,14 @@ export default function Historico() {
     }));
   }, [qolHistory]);
 
-  // Build investment data - use investmentTarget from budget settings
-  const { data: budgetSettings } = trpc.budget.get.useQuery({ year, month });
+  // Build investment data from actual transaction history
+  const { data: investmentHistory } = trpc.annual.getInvestmentHistory.useQuery({ year });
   const investmentData = useMemo(() => {
-    const target = budgetSettings?.investmentTarget ? parseFloat(budgetSettings.investmentTarget) : 0;
-    if (target === 0) return [];
-    // Only count from July 2026 forward
-    const startYear = 2026;
-    const startMonth = 7;
-    const monthsSinceStart = (year - startYear) * 12 + (month - startMonth) + 1;
-    if (monthsSinceStart <= 0) return [];
-    return Array.from({ length: monthsSinceStart }, (_, i) => {
-      const m = startMonth + i;
-      const adjustedMonth = m > 12 ? m - 12 : m;
-      return { month: adjustedMonth, invested: target };
-    });
-  }, [budgetSettings, year, month]);
+    if (!investmentHistory) return [];
+    return (investmentHistory as Array<{ month: number; realInvestment: number; target: number }>)
+      .filter(d => d.realInvestment > 0)
+      .map(d => ({ month: d.month, invested: d.realInvestment }));
+  }, [investmentHistory]);
 
   if (loadingCurrent) {
     return (
