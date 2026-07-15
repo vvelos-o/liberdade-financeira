@@ -105,41 +105,36 @@ function InsightCard({ year, month }: { year: number; month: number }) {
   const dismissMutation = trpc.insights.dismiss.useMutation();
   const utils = trpc.useUtils();
 
-  if (isLoading) return null;
-
-  // If no insight exists, show generate button
-  if (!insight) {
+  // If no insight exists (or still loading), show discreet generate prompt immediately
+  if (!insight && !isLoading) {
     return (
-      <Card className="bg-card border-border border-dashed">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Lightbulb className="h-4 w-4" />
-            <span className="text-sm">Gerar insight para este mês</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              generateMutation.mutate({ year, month }, {
-                onSuccess: () => utils.insights.get.invalidate({ year, month }),
-                onError: (err) => toast.error(err?.message || "Não foi possível gerar o insight."),
-              });
-            }}
-            disabled={generateMutation.isPending}
-          >
-            {generateMutation.isPending ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              "Gerar"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+      <button
+        onClick={() => {
+          generateMutation.mutate({ year, month }, {
+            onSuccess: () => utils.insights.get.invalidate({ year, month }),
+            onError: (err) => toast.error(err?.message || "Não foi possível gerar o insight."),
+          });
+        }}
+        disabled={generateMutation.isPending}
+        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border border-dashed border-border/60 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 text-xs"
+      >
+        {generateMutation.isPending ? (
+          <><RefreshCw className="h-3 w-3 animate-spin" /><span>Gerando insight...</span></>
+        ) : (
+          <><Lightbulb className="h-3 w-3" /><span>Gerar insight para este mês</span></>
+        )}
+      </button>
     );
   }
 
+  // Loading state - show nothing (instant appearance)
+  if (isLoading) return null;
+
   // If dismissed, don't show
-  if (insight.isDismissed) return null;
+  if (insight?.isDismissed) return null;
+
+  // Show the insight
+  if (!insight) return null;
 
   return (
     <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
@@ -152,17 +147,32 @@ function InsightCard({ year, month }: { year: number; month: number }) {
             <p className="text-xs font-medium text-primary mb-1">Insight do mês</p>
             <p className="text-sm text-foreground leading-relaxed">{insight.content}</p>
           </div>
-          <button
-            onClick={() => {
-              dismissMutation.mutate({ year, month }, {
-                onSuccess: () => utils.insights.get.invalidate({ year, month }),
-              });
-            }}
-            className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            aria-label="Dispensar insight"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => {
+                generateMutation.mutate({ year, month }, {
+                  onSuccess: () => utils.insights.get.invalidate({ year, month }),
+                  onError: (err) => toast.error(err?.message || "Não foi possível regenerar."),
+                });
+              }}
+              disabled={generateMutation.isPending}
+              className="p-1 rounded text-muted-foreground hover:text-primary transition-colors"
+              aria-label="Regenerar insight"
+            >
+              <RefreshCw className={cn("h-3 w-3", generateMutation.isPending && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => {
+                dismissMutation.mutate({ year, month }, {
+                  onSuccess: () => utils.insights.get.invalidate({ year, month }),
+                });
+              }}
+              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dispensar insight"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>

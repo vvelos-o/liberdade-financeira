@@ -242,10 +242,33 @@ Regras:
   const db = await getDb();
   if (!db) throw new Error("Erro de conexão com o banco de dados.");
 
-  await db
-    .insert(monthlyInsights)
-    .values({ userId, year, month, content })
-    .onDuplicateKeyUpdate({ set: { content, isDismissed: false } });
+  try {
+    // Try update first (most common case: regenerating)
+    const existing = await db
+      .select({ id: monthlyInsights.id })
+      .from(monthlyInsights)
+      .where(and(
+        eq(monthlyInsights.userId, userId),
+        eq(monthlyInsights.year, year),
+        eq(monthlyInsights.month, month)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(monthlyInsights)
+        .set({ content, isDismissed: false })
+        .where(eq(monthlyInsights.id, existing[0].id));
+    } else {
+      await db
+        .insert(monthlyInsights)
+        .values({ userId, year, month, content });
+    }
+  } catch (dbError: any) {
+    console.error("[Insights] DB save failed:", dbError?.message);
+    // Still return the content even if DB save fails
+    return { content, isDismissed: false };
+  }
 
   return { content, isDismissed: false };
 }
