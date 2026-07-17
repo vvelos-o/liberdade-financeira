@@ -194,7 +194,7 @@ export async function generateMonthlyInsight(userId: number, year: number, month
 
   let content: string;
 
-  // Try LLM first, fall back to deterministic
+  // Try LLM first (with 15s timeout), fall back to deterministic
   try {
     const { invokeLLM } = await import("../_core/llm");
 
@@ -222,13 +222,18 @@ Regras:
 - Use tom amigável mas direto
 - Responda APENAS o insight, sem título ou prefixo`;
 
-    const response = await invokeLLM({
+    // Wrap LLM call with 15s timeout to avoid Railway request timeout
+    const llmPromise = invokeLLM({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "Você é um consultor financeiro pessoal brasileiro. Responda em português." },
         { role: "user", content: prompt },
       ],
     });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("LLM timeout (15s)")), 15_000)
+    );
+    const response = await Promise.race([llmPromise, timeoutPromise]);
 
     const rawContent = response.choices?.[0]?.message?.content;
     content = typeof rawContent === "string" ? rawContent.trim() : "";
