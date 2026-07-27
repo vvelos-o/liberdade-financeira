@@ -10,6 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -492,27 +493,28 @@ function CategoryPercentagesSection() {
           )}
         </div>
 
-        {/* Category percentages */}
+        {/* Category percentages with sliders */}
         {VARIABLE_CATEGORIES.map((cat) => (
-          <div key={cat} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
-              <span className="text-sm text-foreground">{CATEGORY_LABELS[cat]}</span>
-            </div>
-            {editing ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  value={percentages[cat] ?? 0}
-                  onChange={(e) => setPercentages({ ...percentages, [cat]: parseInt(e.target.value) || 0 })}
-                  className="h-7 w-16 text-sm text-right"
-                  min={0}
-                  max={100}
-                />
-                <span className="text-xs text-muted-foreground">%</span>
+          <div key={cat} className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                <span className="text-sm text-foreground">{CATEGORY_LABELS[cat]}</span>
               </div>
-            ) : (
-              <span className="font-money text-sm text-muted-foreground">{percentages[cat] ?? 0}%</span>
+              <span className={cn("font-money text-sm font-medium", editing ? "text-foreground" : "text-muted-foreground")}>
+                {percentages[cat] ?? 0}%
+              </span>
+            </div>
+            {editing && (
+              <Slider
+                value={[percentages[cat] ?? 0]}
+                onValueChange={([val]) => setPercentages({ ...percentages, [cat]: val })}
+                min={0}
+                max={60}
+                step={1}
+                className="[&_[data-slot=slider-range]]:bg-primary/80 [&_[data-slot=slider-track]]:bg-muted/50"
+                style={{ '--slider-color': CATEGORY_COLORS[cat] } as React.CSSProperties}
+              />
             )}
           </div>
         ))}

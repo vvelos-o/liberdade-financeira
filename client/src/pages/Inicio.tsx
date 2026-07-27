@@ -272,16 +272,16 @@ function CategoryBar({ category, budget, spent, index }: {
             )} />
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className={cn("font-money text-xs", isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-muted-foreground")}>
+            <span className={cn("font-money text-sm font-semibold", isOverBudget ? "text-destructive" : isWarning ? "text-amber-400" : "text-foreground")}>
               {formatMoney(spent)}
             </span>
-            <span className="text-[10px] text-muted-foreground">/</span>
-            <span className="font-money text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">/</span>
+            <span className="font-money text-xs text-muted-foreground">
               {formatMoney(budget)}
             </span>
-            <span className="text-[10px] text-muted-foreground mx-0.5">|</span>
+            <span className="text-xs text-muted-foreground mx-0.5">|</span>
             <span className={cn(
-              "font-money text-[10px] font-medium",
+              "font-money text-xs font-medium",
               isOverBudget ? "text-destructive" : remaining > 0 ? "text-positive" : "text-muted-foreground"
             )}>
               {isOverBudget ? `-${formatMoney(Math.abs(remaining))}` : `${formatMoney(remaining)}`}
@@ -300,12 +300,12 @@ function CategoryBar({ category, budget, spent, index }: {
         </div>
       </button>
       {isOverBudget && (
-        <p className="text-[10px] text-destructive mt-0.5 font-medium">
+        <p className="text-xs text-destructive mt-1 font-medium">
           Excedeu {formatMoney(Math.abs(remaining))} ({Math.round(percentage)}%)
         </p>
       )}
       {isWarning && !isOverBudget && (
-        <p className="text-[10px] text-amber-400 mt-0.5">
+        <p className="text-xs text-amber-400 mt-1">
           Atenção: {Math.round(percentage)}% do orçamento utilizado
         </p>
       )}
@@ -463,9 +463,9 @@ export default function Inicio() {
       {/* Category Progress Section */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground">Gastos por categoria</h2>
+          <h2 className="text-base font-semibold text-foreground">Gastos por categoria</h2>
           {funnel && (
-            <span className="font-money text-xs text-muted-foreground">
+            <span className="font-money text-sm text-muted-foreground">
               Total: {formatMoney(totalSpent)}
             </span>
           )}

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 // ─── Transaction Item ────────────────────────────────────────────────────────
 
-function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned, onLinkToInstallment, onFlipType, fixedExpenses, plannedExpenses, installmentMonths, allInstallments }: {
+function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned, onLinkToInstallment, onFlipType, fixedExpenses, plannedExpenses, installmentMonths, allInstallments, budgetFeedback }: {
   tx: any;
   onCategoryChange: (id: number, category: string) => void;
   onLinkToFixed: (id: number, fixedExpenseId: number) => void;
@@ -25,6 +25,7 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned,
   plannedExpenses: any[] | undefined;
   installmentMonths: any[] | undefined;
   allInstallments: any[] | undefined;
+  budgetFeedback: { category: string; remaining: number; budget: number } | null;
 }) {
   const [editing, setEditing] = useState(false);
   const date = new Date(tx.transactionDate);
@@ -191,6 +192,23 @@ function TransactionItem({ tx, onCategoryChange, onLinkToFixed, onLinkToPlanned,
           <span className="text-xs text-muted-foreground block">já na renda</span>
         )}
       </div>
+      {/* Budget feedback badge */}
+      {budgetFeedback && (
+        <div className={cn(
+          "w-full mt-1 px-3 py-1.5 rounded-md text-xs font-medium animate-in fade-in slide-in-from-top-1 duration-200",
+          budgetFeedback.remaining > budgetFeedback.budget * 0.2
+            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+            : budgetFeedback.remaining > 0
+            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+            : "bg-red-500/10 text-red-400 border border-red-500/20"
+        )}>
+          {CATEGORY_LABELS[budgetFeedback.category] ?? budgetFeedback.category}:{" "}
+          {budgetFeedback.remaining > 0
+            ? `R$ ${budgetFeedback.remaining.toFixed(0)} restante`
+            : `Estourou R$ ${Math.abs(budgetFeedback.remaining).toFixed(0)}`
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -270,10 +288,25 @@ export default function Transacoes() {
   const { data: plannedExpenses } = trpc.planned.getExpenses.useQuery({ year, month });
   const { data: installmentMonths } = trpc.installments.getMonthsForPeriod.useQuery({ year, month });
   const { data: allInstallments } = trpc.installments.getAll.useQuery();
+  const { data: funnel } = trpc.dashboard.getFunnel.useQuery({ year, month });
   const syncMutation = trpc.pluggy.syncTransactions.useMutation();
   const updateCategoryMutation = trpc.pluggy.updateCategory.useMutation();
   const flipTypeMutation = trpc.pluggy.flipType.useMutation();
   const utils = trpc.useUtils();
+
+  // Budget feedback state: shows remaining budget after classification
+  const [budgetFeedback, setBudgetFeedback] = useState<Record<number, { category: string; remaining: number; budget: number } | null>>({});
+
+  const showBudgetFeedback = (txId: number, category: string) => {
+    if (!funnel?.categories) return;
+    const cat = funnel.categories.find((c: any) => c.category === category);
+    if (!cat) return; // Only show for variable budget categories
+    setBudgetFeedback(prev => ({ ...prev, [txId]: { category, remaining: cat.budget - cat.spent, budget: cat.budget } }));
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+      setBudgetFeedback(prev => ({ ...prev, [txId]: null }));
+    }, 4000);
+  };
 
 
   const filteredTransactions = transactions?.filter((tx: any) => {
@@ -307,6 +340,7 @@ export default function Transacoes() {
     updateCategoryMutation.mutate({ id, category: category as any, linkedExpenseId: null, linkedExpenseType: null }, {
       onSuccess: () => {
         toast.success("Categoria atualizada.");
+        showBudgetFeedback(id, category);
         utils.dashboard.getFunnel.invalidate();
       },
       onError: (err: any) => {
@@ -509,6 +543,7 @@ export default function Transacoes() {
                   plannedExpenses={plannedExpenses}
                   installmentMonths={installmentMonths}
                   allInstallments={allInstallments}
+                  budgetFeedback={budgetFeedback[tx.id] ?? null}
                 />
               </div>
             ))}

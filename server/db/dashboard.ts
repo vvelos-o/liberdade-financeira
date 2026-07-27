@@ -553,22 +553,27 @@ export async function getInvestmentHistory(userId: number, year: number) {
   const startDate = new Date(year, 0, 1);
   const endDate = new Date(year, 11, 31, 23, 59, 59);
 
-  const monthlyInvestments = await db
-    .select({
-      month: sql<number>`MONTH(${pluggyTransactions.transactionDate})`,
-      total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
-    })
-    .from(pluggyTransactions)
-    .where(
-      and(
-        eq(pluggyTransactions.userId, userId),
-        eq(pluggyTransactions.type, "debit"),
-        eq(pluggyTransactions.category, "investimento" as any),
-        gte(pluggyTransactions.transactionDate, startDate),
-        lte(pluggyTransactions.transactionDate, endDate)
+  let monthlyInvestments: Array<{ month: number; total: string }> = [];
+  try {
+    monthlyInvestments = await db
+      .select({
+        month: sql<number>`MONTH(${pluggyTransactions.transactionDate})`,
+        total: sql<string>`COALESCE(SUM(${pluggyTransactions.amount}), 0)`,
+      })
+      .from(pluggyTransactions)
+      .where(
+        and(
+          eq(pluggyTransactions.userId, userId),
+          eq(pluggyTransactions.type, "debit"),
+          eq(pluggyTransactions.category, "investimento" as any),
+          gte(pluggyTransactions.transactionDate, startDate),
+          lte(pluggyTransactions.transactionDate, endDate)
+        )
       )
-    )
-    .groupBy(sql`MONTH(${pluggyTransactions.transactionDate})`);
+      .groupBy(sql`MONTH(${pluggyTransactions.transactionDate})`);
+  } catch (e) {
+    console.error("[getInvestmentHistory] query failed:", (e as Error).message?.slice(0, 100));
+  }
 
   const budgetRows = await db
     .select({
