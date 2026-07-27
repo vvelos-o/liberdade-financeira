@@ -7,7 +7,7 @@ interface LoginProps {
   onSuccess: () => void;
 }
 
-const PIN_LENGTH = 4;
+const PIN_LENGTH = 6;
 
 export default function Login({ onSuccess }: LoginProps) {
   const [pin, setPin] = useState("");
@@ -94,7 +94,7 @@ export default function Login({ onSuccess }: LoginProps) {
         <motion.div
           animate={shake ? { x: [-10, 10, -8, 8, -4, 4, 0] } : {}}
           transition={{ duration: 0.5, ease: "easeInOut" }}
-          className="flex items-center gap-4 mb-8"
+          className="flex items-center gap-3 mb-8"
         >
           {Array.from({ length: PIN_LENGTH }).map((_, i) => (
             <motion.div
