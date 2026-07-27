@@ -1,5 +1,5 @@
 export const ENV = {
-  appPin: process.env.APP_PIN ?? "1234",
+  appPin: process.env.APP_PIN ?? "123456",
   cookieSecret: process.env.JWT_SECRET ?? "change-me-in-production",
   databaseUrl: process.env.DATABASE_URL ?? "",
   isProduction: process.env.NODE_ENV === "production",

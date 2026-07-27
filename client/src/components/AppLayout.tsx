@@ -50,40 +50,39 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background overflow-hidden">
-      {/* Top Header - Logo + Month Selector */}
-      <header className="flex items-center justify-between px-4 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top">
-        {/* Logo + Wordmark */}
-        <div className="flex items-center gap-2">
-          <img src="/sobra-logo.svg" alt="Sobra" className="h-7 w-auto" />
-          <span className="text-sm font-medium tracking-[-0.5px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>sobra</span>
+      {/* Top Header - Month Selector centered */}
+      <header className="flex items-center justify-center px-3 h-12 border-b border-border header-gradient backdrop-blur-md flex-shrink-0 safe-top relative">
+        {/* Logo + Wordmark - absolute left */}
+        <div className="absolute left-3 flex items-center gap-1.5">
+          <img src="/sobra-logo.svg" alt="Sobra" className="h-6 w-auto" />
+          <span className="text-xs font-medium tracking-[-0.5px] hidden xs:inline" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>sobra</span>
         </div>
-        <div className="flex items-center gap-1">
+        {/* Month Navigation - always centered */}
+        <div className="flex items-center gap-0">
           <button
             onClick={prevMonth}
             disabled={!canGoPrev}
             className={cn(
-              "p-2 rounded-lg transition-colors active:scale-95",
+              "w-10 h-10 flex items-center justify-center rounded-full transition-colors active:scale-90",
               canGoPrev
-                ? "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                : "text-muted-foreground/30 cursor-not-allowed"
+                ? "text-foreground/80 hover:text-foreground hover:bg-secondary/60"
+                : "text-muted-foreground/20 cursor-not-allowed"
             )}
             aria-label="Mês anterior"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
-          <span className="text-sm font-semibold font-display text-foreground px-3 min-w-[150px] text-center select-none">
+          <span className="text-sm font-semibold font-display text-foreground px-2 min-w-[130px] text-center select-none">
             {MONTH_NAMES_FULL[month - 1]} {year}
           </span>
           <button
             onClick={nextMonth}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors active:scale-95"
+            className="w-10 h-10 flex items-center justify-center rounded-full text-foreground/80 hover:text-foreground hover:bg-secondary/60 transition-colors active:scale-90"
             aria-label="Próximo mês"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" />
           </button>
         </div>
-        {/* Spacer for balance */}
-        <div className="w-[88px]"></div>
       </header>
 
       {/* Page Content */}
