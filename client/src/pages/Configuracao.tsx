@@ -791,7 +791,7 @@ function PluggySection() {
                 createTokenMutation.mutate({}, {
                   onSuccess: (data) => {
                     if (data?.connectToken) {
-                      window.open(`https://connect.pluggy.ai/?accessToken=${data.connectToken}`, "_blank");
+                      window.open(`https://connect.pluggy.ai/?connectToken=${data.connectToken}`, "_blank");
                     }
                   },
                   onError: () => toast.error("Erro ao criar token de conexão."),
