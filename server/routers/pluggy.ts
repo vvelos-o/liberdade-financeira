@@ -57,27 +57,24 @@ interface PluggyTransaction {
 }
 
 async function getPluggyTransactions(apiKey: string, accountId: string, from?: string, to?: string) {
-  // v2 uses cursor-based pagination (pageSize param is not supported)
+  // Pluggy v2 uses cursor pagination and returns the next page in the "next" field
   const allResults: PluggyTransaction[] = [];
-  let cursor: string | undefined = undefined;
+  let url: string | undefined =
+    `${PLUGGY_API_URL}/v2/transactions?accountId=${accountId}&pageSize=500` +
+    (from ? `&from=${from}` : "") +
+    (to ? `&to=${to}` : "");
   let page = 0;
   const MAX_PAGES = 20; // safety limit
 
-  do {
-    let url = `${PLUGGY_API_URL}/v2/transactions?accountId=${accountId}`;
-    if (from) url += `&from=${from}`;
-    if (to) url += `&to=${to}`;
-    if (cursor) url += `&cursor=${cursor}`;
-
+  while (url && page < MAX_PAGES) {
     const response = await axios.get(url, {
       headers: { "X-API-KEY": apiKey },
     });
-
-    const results = response.data.results ?? [];
-    allResults.push(...results);
-    cursor = response.data.nextCursor ?? undefined;
+    allResults.push(...(response.data.results ?? []));
+    const next = response.data.next ?? response.data.nextCursor;
+    url = next ? `${PLUGGY_API_URL}/v2/transactions${String(next).startsWith("?") ? next : `?cursor=${next}`}` : undefined;
     page++;
-  } while (cursor && page < MAX_PAGES);
+  }
 
   return allResults;
 }
@@ -159,9 +156,29 @@ export const pluggyRouter = router({
 
 
       let totalImported = 0;
+      const errors: string[] = [];
+      const debug: Array<Record<string, unknown>> = [];
+
+      if (targetConnections.length === 0) {
+        return { success: false, totalImported: 0, errors: ["Nenhuma conexao bancaria encontrada para este usuario."], debug };
+      }
+
       for (const conn of targetConnections) {
         try {
+          const item = await getPluggyItem(apiKey, conn.pluggyItemId);
           const accounts = await getPluggyAccounts(apiKey, conn.pluggyItemId);
+          debug.push({
+            itemId: conn.pluggyItemId,
+            itemStatus: item?.status,
+            executionStatus: item?.executionStatus,
+            accounts: accounts.length,
+            accountIds: accounts.map((a: any) => a.id),
+          });
+
+          if (accounts.length === 0) {
+            errors.push(`Item ${conn.pluggyItemId}: nenhuma conta retornada pela Pluggy (status=${item?.status}, execucao=${item?.executionStatus}).`);
+            continue;
+          }
           for (const account of accounts) {
             const transactions = await getPluggyTransactions(apiKey, account.id, input.fromDate, input.toDate);
             for (const tx of transactions) {
@@ -210,11 +227,15 @@ export const pluggyRouter = router({
             status: "updated",
             lastSyncAt: new Date(),
           });
-        } catch (err) {
-          console.error(`[Pluggy] Sync error for item ${conn.pluggyItemId}:`, err);
+        } catch (err: any) {
+          const status = err?.response?.status;
+          const detail = err?.response?.data ? JSON.stringify(err.response.data) : err?.message;
+          console.error(`[Pluggy] Sync error for item ${conn.pluggyItemId}:`, status, detail);
+          errors.push(`Item ${conn.pluggyItemId}: HTTP ${status ?? "?"} - ${detail}`);
         }
       }
-      return { success: true, totalImported };
+      console.log("[Pluggy] Sync debug:", JSON.stringify(debug), "errors:", JSON.stringify(errors));
+      return { success: errors.length === 0, totalImported, errors, debug };
     }),
 
   // Get transactions for a given month
