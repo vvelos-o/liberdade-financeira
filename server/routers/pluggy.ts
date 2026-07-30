@@ -15,8 +15,11 @@ async function getPluggyApiKey(clientId: string, clientSecret: string): Promise<
   return response.data.apiKey;
 }
 
-async function createPluggyConnectToken(apiKey: string, itemId?: string): Promise<string> {
-  const body: Record<string, unknown> = {};
+async function createPluggyConnectToken(apiKey: string, userId: number, itemId?: string): Promise<string> {
+  const body: Record<string, unknown> = {
+    clientUserId: String(userId),
+    webhookUrl: process.env.APP_URL ? `${process.env.APP_URL}/api/webhooks/pluggy` : undefined
+  };
   if (itemId) body.itemId = itemId;
   const response = await axios.post(`${PLUGGY_API_URL}/connect_token`, body, {
     headers: { "X-API-KEY": apiKey },
@@ -116,7 +119,7 @@ export const pluggyRouter = router({
         throw new Error("Pluggy credentials not configured. Please add PLUGGY_CLIENT_ID and PLUGGY_CLIENT_SECRET.");
       }
       const apiKey = await getPluggyApiKey(clientId, clientSecret);
-      const connectToken = await createPluggyConnectToken(apiKey, input.itemId);
+      const connectToken = await createPluggyConnectToken(apiKey, ctx.user.id, input.itemId);
       return { connectToken };
     }),
 
@@ -259,11 +262,12 @@ export const pluggyRouter = router({
 export async function handlePluggyWebhook(body: {
   event: string;
   itemId?: string;
+  clientUserId?: string;
   data?: Record<string, unknown>;
 }) {
-  console.log("[Pluggy Webhook] Event:", body.event, "ItemId:", body.itemId);
+  console.log("[Pluggy Webhook] Event:", body.event, "ItemId:", body.itemId, "ClientUserId:", body.clientUserId);
 
-  if (body.event === "item/updated" && body.itemId) {
+  if ((body.event === "item/updated" || body.event === "item/created") && body.itemId) {
     // Find the user who owns this item and trigger a sync
     const { getDb } = await import("../db");
     const { pluggyConnections } = await import("../../drizzle/schema");
@@ -272,6 +276,20 @@ export async function handlePluggyWebhook(body: {
     const dbConn = await getDb();
     if (!dbConn) return;
 
+    // 1. Direct registration if clientUserId is present (preferred for new connections)
+    if (body.clientUserId) {
+      const userId = parseInt(body.clientUserId);
+      if (!isNaN(userId)) {
+        await db.upsertPluggyConnection(userId, {
+          pluggyItemId: body.itemId,
+          status: "updated",
+          lastSyncAt: new Date(),
+        });
+        return;
+      }
+    }
+
+    // 2. Fallback: Lookup by itemId for status updates
     const connections = await dbConn
       .select()
       .from(pluggyConnections)
