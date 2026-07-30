@@ -318,8 +318,13 @@ export default function Transacoes() {
 
   const handleSync = () => {
     syncMutation.mutate({}, {
-      onSuccess: (data) => {
-        toast.success(`Sincronizado! ${data.totalImported} transações importadas.`);
+      onSuccess: (data: any) => {
+        console.log("[Pluggy sync]", data);
+        if (data.errors?.length) {
+          toast.error(`Falha na sincronização: ${data.errors[0]}`);
+        } else {
+          toast.success(`Sincronizado! ${data.totalImported} transações importadas.`);
+        }
         utils.pluggy.getTransactions.invalidate();
         utils.dashboard.getFunnel.invalidate();
       },
