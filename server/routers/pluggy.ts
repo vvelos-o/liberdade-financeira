@@ -60,7 +60,7 @@ async function getPluggyTransactions(apiKey: string, accountId: string, from?: s
   // Pluggy v2 uses cursor pagination and returns the next page in the "next" field
   const allResults: PluggyTransaction[] = [];
   let url: string | undefined =
-    `${PLUGGY_API_URL}/v2/transactions?accountId=${accountId}&pageSize=500` +
+    `${PLUGGY_API_URL}/v2/transactions?accountId=${accountId}` +
     (from ? `&from=${from}` : "") +
     (to ? `&to=${to}` : "");
   let page = 0;
@@ -231,6 +231,21 @@ export const pluggyRouter = router({
           const status = err?.response?.status;
           const detail = err?.response?.data ? JSON.stringify(err.response.data) : err?.message;
           console.error(`[Pluggy] Sync error for item ${conn.pluggyItemId}:`, status, detail);
+
+          // Item nao existe mais na Pluggy (foi deletado ou pertence a outra aplicacao):
+          // removemos a conexao obsoleta do banco para o usuario poder reconectar.
+          if (status === 404) {
+            try {
+              await db.deletePluggyConnection(conn.pluggyItemId, ctx.user.id);
+              errors.push(
+                `A conexao bancaria antiga era invalida e foi removida automaticamente. Va em Configuracao > Conexao Bancaria e clique em "Conectar conta bancaria" novamente.`
+              );
+              continue;
+            } catch (delErr) {
+              console.error("[Pluggy] Falha ao remover conexao obsoleta:", delErr);
+            }
+          }
+
           errors.push(`Item ${conn.pluggyItemId}: HTTP ${status ?? "?"} - ${detail}`);
         }
       }
