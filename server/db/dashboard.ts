@@ -303,7 +303,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       eq(incomeEntries.userId, userId),
       eq(incomeEntries.year, year),
       eq(incomeEntries.month, month),
-            eq(incomeSources.isActive, true),
+      eq(incomeSources.isActive, true),
       eq(incomeSources.type, "fixed")
     ));
   const manualFixedIncome = parseFloat(fixedIncomeResult[0]?.total ?? "0");
