@@ -2,7 +2,7 @@
 export { getDb, DATA_CUTOFF_DATE, DATA_CUTOFF_YEAR, DATA_CUTOFF_MONTH } from "./connection";
 export { upsertUser, getUserByOpenId } from "./auth";
 export { getBudgetSettings, upsertBudgetSettings } from "./budget";
-export { getIncomeSources, createIncomeSource, updateIncomeSource, deleteIncomeSource, getIncomeEntries, getIncomeEntriesForYear, upsertIncomeEntry } from "./income";
+export { getIncomeSources, createIncomeSource, updateIncomeSource, deleteIncomeSource, getIncomeEntries, getIncomeEntriesForYear, upsertIncomeEntry, deleteIncomeEntry } from "./income";
 export { getFixedExpenseCategories, createFixedExpenseCategory, updateFixedExpenseCategory, getFixedExpenseEntries, getFixedExpenseEntriesForYear, upsertFixedExpenseEntry } from "./fixedExpenses";
 export { getQolExpenses, getQolExpensesForYear, createQolExpense, updateQolExpense, deleteQolExpense } from "./qolExpenses";
 export { getInstallmentExpenses, getInstallmentMonthsForPeriod, getInstallmentMonthsForYear, createInstallmentExpense, markInstallmentMonthPaid, deleteInstallmentExpense } from "./installments";
