@@ -130,8 +130,8 @@ function IncomeSection() {
           <Skeleton className="h-8 w-full" />
         ) : (
           <>
-            {sources?.filter((s: any) => s.isActive).map((src: any) => {
-              const amount = getEntryAmount(src.id);
+            {sources?.filter((s: any) => s.isActive && entries?.some((e: any) => e.sourceId === s.id)).map((src: any) => {
+            const amount = getEntryAmount(src.id);
               return (
                 <div key={src.id} className="flex items-center justify-between py-1.5">
                   <div className="flex items-center gap-2 min-w-0">
@@ -285,8 +285,8 @@ function FixedExpensesSection() {
     if (!newName) return;
     createMutation.mutate({ name: newName }, {
       onSuccess: (created: any) => {
-        if (newAmount && created?.id) {
-          upsertEntryMutation.mutate({ categoryId: created.id, year, month, amount: newAmount }, {
+          if (created?.id) {
+            upsertEntryMutation.mutate({ sourceId: created.id, year, month, amount: newAmount || "0" }, {
             onSuccess: () => {
               utils.fixedExpenses.getCategories.invalidate();
               utils.fixedExpenses.getEntries.invalidate();
