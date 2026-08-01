@@ -29,6 +29,7 @@ function IncomeSection() {
   const createMutation = trpc.income.createSource.useMutation();
   const upsertEntryMutation = trpc.income.upsertEntry.useMutation();
   const deleteMutation = trpc.income.deleteSource.useMutation();
+  const deleteEntryMutation = trpc.income.deleteEntry.useMutation();
   const utils = trpc.useUtils();
 
   const [showAdd, setShowAdd] = useState(false);
@@ -166,7 +167,7 @@ function IncomeSection() {
                           {formatMoney(amount)}
                         </button>
                         <button
-                          onClick={() => deleteMutation.mutate({ id: src.id }, { onSuccess: () => { utils.income.getSources.invalidate(); utils.income.getEntries.invalidate(); } })}
+                          onClick={() => deleteEntryMutation.mutate({ sourceId: src.id, year, month }, { onSuccess: () => { utils.income.getEntries.invalidate(); utils.dashboard.getFunnel.invalidate(); } })}
                           className="text-muted-foreground hover:text-destructive transition-colors p-1"
                         >
                           <Trash2 className="h-3 w-3" />
