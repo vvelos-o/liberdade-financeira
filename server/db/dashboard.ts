@@ -303,6 +303,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       eq(incomeEntries.userId, userId),
       eq(incomeEntries.year, year),
       eq(incomeEntries.month, month),
+            eq(incomeSources.isActive, true),
       eq(incomeSources.type, "fixed")
     ));
   const manualFixedIncome = parseFloat(fixedIncomeResult[0]?.total ?? "0");
@@ -315,6 +316,7 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
       eq(incomeEntries.userId, userId),
       eq(incomeEntries.year, year),
       eq(incomeEntries.month, month),
+      eq(incomeSources.isActive, true),
       inArray(incomeSources.type, ["extra", "variable"])
     ));
   const manualExtraIncome = parseFloat(extraIncomeResult[0]?.total ?? "0");
@@ -751,3 +753,5 @@ export async function getCategoryTransactions(userId: number, year: number, mont
 
   return results;
 }
+
+fix: ignorar fontes de renda inativas no dashboard
