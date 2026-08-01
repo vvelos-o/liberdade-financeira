@@ -753,5 +753,3 @@ export async function getCategoryTransactions(userId: number, year: number, mont
 
   return results;
 }
-
-fix: ignorar fontes de renda inativas no dashboard
