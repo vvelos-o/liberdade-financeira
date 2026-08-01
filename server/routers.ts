@@ -48,6 +48,11 @@ const incomeRouter = router({
   deleteSource: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
     db.deleteIncomeSource(input.id, ctx.user.id)
   ),
+    deleteEntry: protectedProcedure
+    .input(yearMonthSchema.extend({ sourceId: z.number() }))
+    .mutation(({ ctx, input }) =>
+      db.deleteIncomeEntry(ctx.user.id, input.sourceId, input.year, input.month)
+    ),
   getEntries: protectedProcedure.input(yearMonthSchema).query(({ ctx, input }) =>
     db.getIncomeEntries(ctx.user.id, input.year, input.month)
   ),
