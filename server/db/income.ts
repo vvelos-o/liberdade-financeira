@@ -47,3 +47,14 @@ export async function upsertIncomeEntry(userId: number, sourceId: number, year: 
     .values({ userId, sourceId, year, month, amount, notes })
     .onDuplicateKeyUpdate({ set: { amount, notes: notes ?? null } });
 }
+
+export async function deleteIncomeEntry(userId: number, sourceId: number, year: number, month: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(incomeEntries).where(and(
+    eq(incomeEntries.userId, userId),
+    eq(incomeEntries.sourceId, sourceId),
+    eq(incomeEntries.year, year),
+    eq(incomeEntries.month, month),
+  ));
+}
