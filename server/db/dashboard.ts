@@ -482,10 +482,6 @@ export async function getDashboardFunnel(userId: number, year: number, month: nu
     const cat = row.category as string;
     spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
   }
-  for (const row of plannedByCategory) {
-    const cat = row.category as string;
-    spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
-  }
   for (const row of installmentByCategory) {
     const cat = row.category as string;
     spendingMap.set(cat, (spendingMap.get(cat) ?? 0) + parseFloat(row.total));
@@ -694,28 +690,6 @@ export async function getCategoryTransactions(userId: number, year: number, mont
       description: row.description ?? "Gasto manual",
       amount: parseFloat(String(row.amount)),
       source: "manual",
-      date: "",
-    });
-  }
-
-  const plannedRows = await db
-    .select({
-      description: plannedExpenses.description,
-      amount: plannedExpenses.amount,
-    })
-    .from(plannedExpenses)
-    .where(and(
-      eq(plannedExpenses.userId, userId),
-      eq(plannedExpenses.year, year),
-      eq(plannedExpenses.month, month),
-      eq(plannedExpenses.category, cat)
-    ));
-
-  for (const row of plannedRows) {
-    results.push({
-      description: `(Programado) ${row.description ?? "Gasto programado"}`,
-      amount: parseFloat(String(row.amount)),
-      source: "planned",
       date: "",
     });
   }
