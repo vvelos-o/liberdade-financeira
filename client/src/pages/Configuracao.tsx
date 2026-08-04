@@ -651,12 +651,17 @@ function PlannedExpensesSection() {
   const { year, month } = useMonth();
   const { data: planned, isLoading } = trpc.planned.getExpenses.useQuery({ year, month });
   const createMutation = trpc.planned.create.useMutation();
+  const updateMutation = trpc.planned.update.useMutation();
+  const deleteMutation = trpc.planned.delete.useMutation();
   const utils = trpc.useUtils();
 
   const [showAdd, setShowAdd] = useState(false);
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editCategory, setEditCategory] = useState("");
 
   const handleAdd = () => {
     if (!desc || !amount) return;
