@@ -686,6 +686,27 @@ function PlannedExpensesSection() {
     });
   };
 
+    const handleSaveEdit = (id: number) => {
+    updateMutation.mutate({ id, amount: editAmount, category: (editCategory || "outros") as any }, {
+      onSuccess: () => {
+        utils.planned.getExpenses.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+        setEditingId(null);
+        toast.success("Gasto atualizado.");
+      },
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    deleteMutation.mutate({ id }, {
+      onSuccess: () => {
+        utils.planned.getExpenses.invalidate();
+        utils.dashboard.getFunnel.invalidate();
+        toast.success("Gasto removido.");
+      },
+    });
+  };
+
   return (
     <Card className="bg-card border-border">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -700,7 +721,7 @@ function PlannedExpensesSection() {
         ) : (
           <>
             {planned && planned.length > 0 ? (
-              planned.map((p: any) => (
+                            planned.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between py-1.5">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm text-foreground truncate">{p.description}</span>
@@ -710,9 +731,50 @@ function PlannedExpensesSection() {
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-money text-sm text-muted-foreground">{formatMoney(parseFloat(p.amount))}</span>
-                    {p.isPaid && <Check className="h-3 w-3 text-positive" />}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {editingId === p.id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          className="h-7 w-20 text-sm text-right"
+                          autoFocus
+                          onKeyDown={(e) => e.key === "Enter" && handleSaveEdit(p.id)}
+                        />
+                        <select
+                          value={editCategory}
+                          onChange={(e) => setEditCategory(e.target.value)}
+                          className="h-7 text-xs rounded-md border border-border bg-background px-1"
+                        >
+                          {VARIABLE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => handleSaveEdit(p.id)} className="text-positive p-1">
+                          <Check className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="text-muted-foreground p-1">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setEditingId(p.id); setEditAmount(String(parseFloat(p.amount))); setEditCategory(p.category ?? "outros"); }}
+                          className="font-money text-sm text-muted-foreground hover:underline cursor-pointer"
+                        >
+                          {formatMoney(parseFloat(p.amount))}
+                        </button>
+                        {p.isPaid && <Check className="h-3 w-3 text-positive" />}
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))
