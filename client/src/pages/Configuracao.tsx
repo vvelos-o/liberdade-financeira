@@ -661,7 +661,6 @@ function PlannedExpensesSection() {
   const [category, setCategory] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState("");
-  const [editCategory, setEditCategory] = useState("");
 
   const handleAdd = () => {
     if (!desc || !amount) return;
@@ -687,7 +686,7 @@ function PlannedExpensesSection() {
   };
 
     const handleSaveEdit = (id: number) => {
-    updateMutation.mutate({ id, amount: editAmount, category: (editCategory || "outros") as any }, {
+      updateMutation.mutate({ id, amount: editAmount }, {
       onSuccess: () => {
         utils.planned.getExpenses.invalidate();
         utils.dashboard.getFunnel.invalidate();
@@ -721,16 +720,9 @@ function PlannedExpensesSection() {
         ) : (
           <>
             {planned && planned.length > 0 ? (
-                            planned.map((p: any) => (
+                                          planned.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between py-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm text-foreground truncate">{p.description}</span>
-                    {p.category && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        {CATEGORY_LABELS[p.category] ?? p.category}
-                      </Badge>
-                    )}
-                  </div>
+                  <span className="text-sm text-foreground truncate">{p.description}</span>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {editingId === p.id ? (
                       <div className="flex items-center gap-1">
@@ -738,19 +730,10 @@ function PlannedExpensesSection() {
                           type="number"
                           value={editAmount}
                           onChange={(e) => setEditAmount(e.target.value)}
-                          className="h-7 w-20 text-sm text-right"
+                          className="h-7 w-24 text-sm text-right"
                           autoFocus
                           onKeyDown={(e) => e.key === "Enter" && handleSaveEdit(p.id)}
                         />
-                        <select
-                          value={editCategory}
-                          onChange={(e) => setEditCategory(e.target.value)}
-                          className="h-7 text-xs rounded-md border border-border bg-background px-1"
-                        >
-                          {VARIABLE_CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                          ))}
-                        </select>
                         <button onClick={() => handleSaveEdit(p.id)} className="text-positive p-1">
                           <Check className="h-3 w-3" />
                         </button>
@@ -761,7 +744,7 @@ function PlannedExpensesSection() {
                     ) : (
                       <>
                         <button
-                          onClick={() => { setEditingId(p.id); setEditAmount(String(parseFloat(p.amount))); setEditCategory(p.category ?? "outros"); }}
+                          onClick={() => { setEditingId(p.id); setEditAmount(String(parseFloat(p.amount))); }}
                           className="font-money text-sm text-muted-foreground hover:underline cursor-pointer"
                         >
                           {formatMoney(parseFloat(p.amount))}
@@ -786,15 +769,7 @@ function PlannedExpensesSection() {
             {showAdd ? (
               <div className="space-y-2 pt-2 border-t border-border">
                 <Input placeholder="Descrição (ex: Personal Trainer)" value={desc} onChange={(e) => setDesc(e.target.value)} className="h-8 text-sm" />
-                <div className="flex gap-2">
-                  <Input placeholder="Valor" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-8 text-sm flex-1" />
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-8 text-xs rounded-md border border-border bg-background px-2">
-                    <option value="">Categoria</option>
-                    {VARIABLE_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
-                    ))}
-                  </select>
-                </div>
+                <Input placeholder="Valor" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-8 text-sm" />
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleAdd} disabled={createMutation.isPending} className="h-7 text-xs">
                     <Check className="h-3 w-3 mr-1" />Salvar
